@@ -1,13 +1,12 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+ï»¿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 using MongoDB.Driver;
-using MyDeezerStats.Application.DeezerServices;
 using MyDeezerStats.Application.Dtos.LastStream;
-using MyDeezerStats.Application.ExcelServices;
 using MyDeezerStats.Application.Interfaces;
-using MyDeezerStats.Application.LastFmServices;
-using MyDeezerStats.Application.MongoDbServices;
+using MyDeezerStats.Application.Services;
 using MyDeezerStats.Domain.Entities;
 using MyDeezerStats.Domain.Repositories;
 using MyDeezerStats.Infrastructure.Mongo.Authentification;
@@ -18,29 +17,58 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuration hiérarchique
+// Configuration hiÃ©rarchique
 builder.Configuration
     .AddJsonFile("appsettings.json")
-    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true);
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+    .AddEnvironmentVariables();
 
+// Gestion du host Mongo selon si on est dans un conteneur
 var isInContainer = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
 var mongoHost = isInContainer ? "mongodb" : "localhost";
-
-
 builder.Configuration["MongoDbSettings:ConnectionString"] =
-    builder.Configuration["MongoDbSettings:ConnectionString"]!
-          .Replace("localhost", mongoHost);
+    builder.Configuration["MongoDbSettings:ConnectionString"]!.Replace("localhost", mongoHost);
 
-// Ajouter les services à l'injection de dépendances
+// Logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 
-// Ajouter la configuration JwtSettings
+// Configuration JWT et LastFm
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
-builder.Services.Configure<LastFmOptions>(
-    builder.Configuration.GetSection("LastFm"));
-// Ajouter les autres services
+builder.Services.Configure<LastFmOptions>(builder.Configuration.GetSection("LastFm"));
+builder.Services.Configure<MongoDbSettings>(builder.Configuration.GetSection("MongoDbSettings"));
+
+// âš¡ MongoDB : registration unique et test de connexion
+builder.Services.AddSingleton<IMongoDatabase>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    var logger = loggerFactory.CreateLogger("MongoInit");
+
+    var mongoSettings = config.GetSection("MongoDbSettings").Get<MongoDbSettings>();
+    if (mongoSettings == null)
+        throw new InvalidOperationException("MongoDbSettings section is missing.");
+
+    var client = new MongoClient(mongoSettings.ConnectionString);
+    var database = client.GetDatabase(mongoSettings.DatabaseName);
+
+    try
+    {
+        database.RunCommandAsync((Command<BsonDocument>)"{ping:1}").Wait();
+        logger.LogInformation("Mongo connectÃ© sur {ConnectionString}, base {Database}",
+            mongoSettings.ConnectionString, mongoSettings.DatabaseName);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Impossible de se connecter Ã  MongoDB");
+        throw;
+    }
+
+    return database;
+});
+
+// Services Application
 builder.Services.AddScoped<IDeezerService, DeezerService>();
 builder.Services.AddHttpClient<ILastFmService, LastFmService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
@@ -48,13 +76,15 @@ builder.Services.AddScoped<IListeningService, ListeningService>();
 builder.Services.AddScoped<IExcelService, ExcelService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-//Repository
+// Repositories
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
 builder.Services.AddScoped<IListeningRepository, ListeningRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 builder.Services.AddScoped<PasswordHasher<User>>();
 builder.Services.AddHttpClient();
+
+// Controllers + JSON options
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -63,24 +93,13 @@ builder.Services.AddControllers()
 
 System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-builder.Services.AddSingleton<IMongoDatabase>(sp =>
-{
-    var settings = builder.Configuration.GetSection("MongoDbSettings").Get<MongoDbSettings>();
-    if (settings == null)
-    {
-        throw new InvalidOperationException("MongoDbSettings configuration is missing or invalid.");
-    }
-
-    var client = new MongoClient(settings.ConnectionString);
-    return client.GetDatabase(settings.DatabaseName);
-});
-
+// Limite upload
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 100 * 1024 * 1024;
+    options.MultipartBodyLengthLimit = 100 * 1024 * 1024; // 100MB
 });
 
-// Configuration de l'authentification JWT
+// Auth JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -90,12 +109,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"], 
-            ValidAudience = builder.Configuration["Jwt:Audience"],  
-            IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SecretKey"]!))
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SecretKey"]!))
         };
     });
 
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowLocalhost", policy =>
@@ -109,22 +130,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configurer CORS
+// Middleware
 app.UseCors("AllowLocalhost");
 
-// Log des requêtes entrantes
 app.Use(async (context, next) =>
 {
     Console.WriteLine($"Incoming request: {context.Request.Method} {context.Request.Path}");
     await next.Invoke();
 });
 
-// Authentification et autorisation
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Mappe les contrôleurs
 app.MapControllers();
 
-// Lance l'application
 app.Run();

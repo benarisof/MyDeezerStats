@@ -3,7 +3,7 @@ using MyDeezerStats.Application.Interfaces;
 using MyDeezerStats.Domain.Repositories;
 
 
-namespace MyDeezerStats.Application.MongoDbServices
+namespace MyDeezerStats.Application.Services
 {
     public class SearchService : ISearchService
     {

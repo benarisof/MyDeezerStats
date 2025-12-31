@@ -8,7 +8,7 @@ using MyDeezerStats.Domain.Entities.DeezerApi;
 using MyDeezerStats.Application.Dtos.TopStream;
 
 
-namespace MyDeezerStats.Application.DeezerServices
+namespace MyDeezerStats.Application.Services
 {
     public class DeezerService : IDeezerService
     {
@@ -190,41 +190,6 @@ namespace MyDeezerStats.Application.DeezerServices
         }
      
 
-   /*     public async Task<FullArtistInfos> EnrichFullArtistWithDeezerData(ArtistListening artist)
-        {
-            if (artist == null)
-            {
-                _logger.LogWarning("Artist cannot be null");
-                throw new ArgumentNullException(nameof(artist));
-            }
-
-            try
-            {
-                // Recherche de l'artiste
-                var deezerArtist = await SearchArtistOnDeezer(artist.Name);
-                if (deezerArtist == null)
-                {
-                    _logger.LogInformation("Artist not found on Deezer: {Name}", artist.Name);
-                    return CreateBasicFullArtist(artist);
-                }
-
-                // Récupération des informations détaillées
-                var fullDetails = await GetFullArtistDetails(deezerArtist.Id);
-                if (fullDetails == null)
-                {
-                    _logger.LogWarning("Artist details not found for ID: {Id}", deezerArtist.Id);
-                    return CreateBasicFullArtistWithPartialDeezerData(artist, deezerArtist);
-                }
-
-                return MapToFullArtistInfos(artist, fullDetails);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error enriching artist {Name}", artist.Name);
-                return CreateBasicFullArtist(artist);
-            }
-        }*/
-
 
         private FullAlbumInfos CreateBasicFullAlbum(AlbumListening album)
         {
@@ -343,60 +308,6 @@ namespace MyDeezerStats.Application.DeezerServices
             };
         }
 
-        private FullArtistInfos MapToFullArtistInfos(ArtistListening artist, DeezerArtistDetails artistDetails)
-        {
-            // Validation des paramètres
-            ArgumentNullException.ThrowIfNull(artist);
-            ArgumentNullException.ThrowIfNull(artistDetails);
-
-            var trackInfos = new List<ApiTrackInfos>();
-            int totalListeningTime = 0;
-
-            // Gestion des tracks
-            foreach (var trackEntry in artist.StreamCountByTrack)
-            {
-                var trackName = trackEntry.Key;
-                var playCount = trackEntry.Value;
-                var trackListeningTime = 0;
-                var trackDuration = 0;
-                var trackDetail = this.GetTrackFromDeezer(trackName, artistDetails.Name).Result;
-                var trackUrl = "";
-                var trackAlbum = "";
-                if (trackDetail is not null)
-                {
-                    trackDuration = trackDetail.Duration;
-                    trackListeningTime = playCount * trackDuration;
-                    trackUrl = trackDetail.CoverUrl;
-                    trackAlbum = trackDetail.Album.Title;
-                }
-
-                totalListeningTime += trackListeningTime;
-
-                // Ajout des informations du morceau dans la liste
-                trackInfos.Add(new ApiTrackInfos
-                {
-                    Track = trackName,
-                    Artist = artist.Name,
-                    Count = playCount,
-                    TrackUrl = trackUrl,
-                    Duration = trackDuration, 
-                    TotalListening = trackListeningTime,
-                    Album = trackAlbum
-                });
-            }
-
-            // Retourne les informations complètes sur l'artiste
-            return new FullArtistInfos
-            {
-                Artist = artistDetails?.Name ?? artist.Name,
-                PlayCount = artist.StreamCount,
-                TotalListening = totalListeningTime,
-                NbFans = artistDetails?.NbFan ?? 0,
-                TrackInfos = trackInfos,
-                CoverUrl = artistDetails?.PictureBig ?? artistDetails?.Picture ?? string.Empty
-            };
-        }
-
         private FullAlbumInfos CreateBasicFullAlbumWithPartialDeezerData(AlbumListening album, DeezerAlbum deezerAlbum)
         {
             return new FullAlbumInfos
@@ -435,18 +346,27 @@ namespace MyDeezerStats.Application.DeezerServices
             };
         }
 
-
         private async Task<DeezerAlbum?> SearchAlbumOnDeezer(string title, string artist)
         {
             try
             {
                 var response = await _httpClient.GetAsync(
-                    $"{DeezerApiBaseUrl}/search/album?q=artist:\"{Uri.EscapeDataString(artist)}\" album:\"{Uri.EscapeDataString(title)}\"&limit=1");
+                    $"{DeezerApiBaseUrl}/search/album?q=artist:\"{Uri.EscapeDataString(artist)}\" album:\"{Uri.EscapeDataString(title)}\"&limit=10");
 
                 response.EnsureSuccessStatusCode();
 
                 var content = await response.Content.ReadFromJsonAsync<DeezerSearchResponse<DeezerAlbum>>();
-                return content?.Data?.FirstOrDefault();
+
+                // Filtrage manuel pour une correspondance exacte du titre
+                return content?.Data?
+                    .FirstOrDefault(album =>
+                        album.Title?.Equals(title, StringComparison.OrdinalIgnoreCase) == true);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Error searching album {title} on Deezer", title);
+                // Retourner null ou une valeur par défaut, ou relancer une exception personnalisée
+                return null;
             }
             catch (Exception ex)
             {
@@ -454,6 +374,8 @@ namespace MyDeezerStats.Application.DeezerServices
                 return null;
             }
         }
+
+
 
 
         private async Task<DeezerArtist?> SearchArtistOnDeezer(string artistName)
@@ -467,6 +389,12 @@ namespace MyDeezerStats.Application.DeezerServices
 
                 var content = await response.Content.ReadFromJsonAsync<DeezerSearchResponse<DeezerArtist>>();
                 return content?.Data?.FirstOrDefault();
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Error searching artist {ArtistName} on Deezer", artistName);
+                // Retourner null ou une valeur par défaut, ou relancer une exception personnalisée
+                return null;
             }
             catch (Exception ex)
             {

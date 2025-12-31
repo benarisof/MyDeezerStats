@@ -7,6 +7,14 @@ WORKDIR /app
 COPY MyDeezerStat.sln ./
 COPY ./ ./
 
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
+ENV HTTP_PROXY=$HTTP_PROXY
+ENV HTTPS_PROXY=$HTTPS_PROXY
+ENV NO_PROXY=$NO_PROXY
+
 # Restaurer les dépendances et construire l'application
 RUN dotnet restore
 RUN dotnet publish -c Release -o /out

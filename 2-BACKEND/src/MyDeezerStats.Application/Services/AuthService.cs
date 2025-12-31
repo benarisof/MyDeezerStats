@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 using DnsClient.Internal;
 using Microsoft.AspNetCore.Identity;
 
-namespace MyDeezerStats.Application.MongoDbServices
+namespace MyDeezerStats.Application.Services
 {
     public class AuthService : IAuthService
     {

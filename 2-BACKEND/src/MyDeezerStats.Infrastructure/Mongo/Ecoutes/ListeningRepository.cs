@@ -1,536 +1,238 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
-using MongoDB.Bson.IO;
 using MongoDB.Driver;
 using MyDeezerStats.Domain.Entities;
 using MyDeezerStats.Domain.Entities.ListeningInfos;
 using MyDeezerStats.Domain.Repositories;
-using MyDeezerStats.Infrastructure.Settings;
 using System.Text.RegularExpressions;
 
 namespace MyDeezerStats.Infrastructure.Mongo.Ecoutes
 {
     public class ListeningRepository : IListeningRepository
     {
-        private readonly IMongoDatabase _database;
+        private readonly IMongoCollection<ListeningEntry> _collection;
+        private readonly IMongoCollection<BsonDocument> _bsonCollection;
         private readonly ILogger<ListeningRepository> _logger;
+        private const string CollectionName = "listening";
 
-        public ListeningRepository(IConfiguration config, ILogger<ListeningRepository> logger)
+        public ListeningRepository(IMongoDatabase database, ILogger<ListeningRepository> logger)
         {
-            var settings = config.GetSection("MongoDbSettings").Get<MongoDbSettings>();
-            if (settings is null)
-            {
-                throw new ArgumentNullException("MongoDbSettings", "MongoDbSettings configuration section is missing.");
-            }
-
-            var client = new MongoClient(settings.ConnectionString);
-            _database = client.GetDatabase(settings.DatabaseName);
+            _collection = database.GetCollection<ListeningEntry>(CollectionName);
+            _bsonCollection = database.GetCollection<BsonDocument>(CollectionName);
             _logger = logger;
         }
 
         public async Task<List<ListeningEntry>> GetLatestListeningsAsync(int limit)
         {
-            var collection = _database.GetCollection<BsonDocument>("listening");
-
-            var result = await collection
-                .Find(new BsonDocument())
-                .Sort(Builders<BsonDocument>.Sort.Descending("Date"))
-                .Limit(limit)
-                .ToListAsync();
-
-            return result.Select(doc => new ListeningEntry
+            if (limit <= 0 || limit > 1000)
             {
-                Track = doc.GetValue("Track", "").AsString,
-                Artist = doc.GetValue("Artist", "").AsString,
-                Album = doc.GetValue("Album", "").AsString,
-                Date = doc.GetValue("Date", DateTime.MinValue).ToUniversalTime()
-            }).ToList();
+                _logger.LogWarning("Invalid limit parameter: {Limit}, using default 100", limit);
+                limit = 100;
+            }
+
+            try
+            {
+                return await _collection
+                    .Find(FilterDefinition<ListeningEntry>.Empty)
+                    .SortByDescending(x => x.Date)
+                    .Limit(limit)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving latest {Limit} listenings", limit);
+                throw new ApplicationException("Erreur lors de la récupération des écoutes récentes", ex);
+            }
         }
 
         public async Task InsertListeningsAsync(List<ListeningEntry> listenings)
         {
-            var collection = _database.GetCollection<ListeningEntry>("listening");
-            foreach (var listening in listenings)
+            if (listenings == null || !listenings.Any())
             {
-                var filter = Builders<ListeningEntry>.Filter.And(
-                    Builders<ListeningEntry>.Filter.Eq(x => x.Track, listening.Track),
-                    Builders<ListeningEntry>.Filter.Eq(x => x.Artist, listening.Artist),
-                    Builders<ListeningEntry>.Filter.Eq(x => x.Album, listening.Album),
-                    Builders<ListeningEntry>.Filter.Eq(x => x.Date, listening.Date)
-                );
+                _logger.LogWarning("No listenings to insert");
+                return;
+            }
 
-                var exists = await collection.Find(filter).AnyAsync();
-                if (!exists)
+            try
+            {
+                var operations = new List<WriteModel<ListeningEntry>>();
+
+                foreach (var listening in listenings)
                 {
-                    await collection.InsertOneAsync(listening);
+                    // Filtre sur Track, Artist, Album et Date
+                    var filter = Builders<ListeningEntry>.Filter.And(
+                        Builders<ListeningEntry>.Filter.Eq(x => x.Track, listening.Track),
+                        Builders<ListeningEntry>.Filter.Eq(x => x.Artist, listening.Artist),
+                        Builders<ListeningEntry>.Filter.Eq(x => x.Album, listening.Album),
+                        Builders<ListeningEntry>.Filter.Eq(x => x.Date, listening.Date)
+                    );
+
+                    // Mise à jour des champs
+                    var update = Builders<ListeningEntry>.Update
+                        .Set(x => x.Track, listening.Track)
+                        .Set(x => x.Artist, listening.Artist)
+                        .Set(x => x.Album, listening.Album)
+                        .Set(x => x.Duration, listening.Duration)
+                        .Set(x => x.Date, listening.Date)
+                        .SetOnInsert(x => x.Id, string.IsNullOrEmpty(listening.Id)
+                            ? ObjectId.GenerateNewId().ToString()
+                            : listening.Id);
+
+                    var operation = new UpdateOneModel<ListeningEntry>(filter, update)
+                    {
+                        IsUpsert = true
+                    };
+
+                    operations.Add(operation);
                 }
+
+                if (operations.Any())
+                {
+                    var result = await _collection.BulkWriteAsync(operations, new BulkWriteOptions
+                    {
+                        IsOrdered = false
+                    });
+
+                    _logger.LogInformation(
+                        "Bulk insert/update completed: {Matched} matched, {Modified} modified, {Upserts} upserted",
+                        result.MatchedCount, result.ModifiedCount, result.Upserts.Count);
+                }
+            }
+            catch (MongoBulkWriteException bulkEx)
+            {
+                _logger.LogWarning(bulkEx, "Partial failure during bulk insert/update of {Count} listenings", listenings.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during bulk insert/update of {Count} listenings", listenings.Count);
+                throw new ApplicationException("Erreur lors de l'insertion des écoutes", ex);
             }
         }
 
+
+
         public async Task<List<AlbumListening>> GetTopAlbumsWithAsync(int limit, DateTime? from = null, DateTime? to = null)
         {
-            // Validation des paramètres
-            if (limit <= 0 || limit > 100)
-                limit = 5;
+            limit = ValidateLimit(limit);
 
-            var collection = _database.GetCollection<BsonDocument>("listening");
-
-            // Construction du filtre de base avec dates
-            var dateFilter = BuildDateFilter(from, to);
-
-            // Filtre complet incluant la vérification des albums non vides
-            var completeFilter = Builders<BsonDocument>.Filter.And(
-                dateFilter,
-                Builders<BsonDocument>.Filter.Exists("Album"),
-                Builders<BsonDocument>.Filter.Ne("Album", BsonNull.Value),
-                Builders<BsonDocument>.Filter.Ne("Album", ""),
-                Builders<BsonDocument>.Filter.Exists("Track"),
-                Builders<BsonDocument>.Filter.Ne("Track", BsonNull.Value),
-                Builders<BsonDocument>.Filter.Ne("Track", "")
-            );
-
-            var pipeline = new[]
+            try
             {
-                // Étape 1 : Filtrer
-                PipelineStageDefinitionBuilder.Match(completeFilter),
+                var pipeline = BuildTopAlbumsPipeline(limit, from, to);
+                var results = await _bsonCollection.Aggregate<BsonDocument>(pipeline).ToListAsync();
 
-                // Étape 2 : Ajouter les champs normalisés
-                new BsonDocument("$project", new BsonDocument
-                {
-                    { "Album", 1 },
-                    { "Artist", 1 },
-                    { "NormalizedAlbum", new BsonDocument("$toLower",
-                    new BsonDocument("$trim", new BsonDocument("input", "$Album"))) }
-                }),
-
-                // Étape 3 : Extraire l'artiste principal
-                new BsonDocument("$addFields", new BsonDocument("PrimaryArtist",
-                    new BsonDocument("$let", new BsonDocument
-                    {
-                        { "vars", new BsonDocument("artists", new BsonDocument("$split", new BsonArray { "$Artist", "," })) },
-                        { "in", new BsonDocument("$trim", new BsonDocument("input",
-                    new BsonDocument("$cond", new BsonArray
-                    {
-                        new BsonDocument("$gt", new BsonArray { new BsonDocument("$size", "$$artists"), 0 }),
-                        new BsonDocument("$arrayElemAt", new BsonArray { "$$artists", 0 }),
-                            ""
-                        }))) }
-                    }))
-                    ),
-
-                // Étape 4 : Grouper
-                new BsonDocument("$group", new BsonDocument
-                {
-                    { "_id", new BsonDocument
-                            {
-                                { "Album", "$NormalizedAlbum" },
-                                { "Artist", "$PrimaryArtist" }
-                            }
-                    },
-                    { "TotalCount", new BsonDocument("$sum", 1) },
-                    { "OriginalTitle", new BsonDocument("$first", "$Album") } 
-                }),
-
-                // Étape 5 : Trier
-                new BsonDocument("$sort", new BsonDocument("TotalCount", -1)),
-
-                // Étape 6 : Limite
-                new BsonDocument("$limit", limit),
-
-                // Étape 7 : Projection finale
-                new BsonDocument("$project", new BsonDocument
-                {
-                    { "Title", "$OriginalTitle" },
-                    { "Artist", "$_id.Artist" },
-                    { "StreamCount", "$TotalCount" },
-                    { "_id", 0 }
-                })
-            };
-
-            var results = await collection.Aggregate<BsonDocument>(pipeline).ToListAsync();
-
-            return results.Select(doc => new AlbumListening
+                var albumListenings = results.Select(MapBsonToAlbumListening).ToList();
+                _logger.LogDebug("Retrieved {Count} top albums", albumListenings.Count);
+                return albumListenings;
+            }
+            catch (Exception ex)
             {
-                Title = doc["Title"].AsString,
-                Artist = doc["Artist"].AsString,
-                StreamCount = doc["StreamCount"].AsInt32
-            }).ToList();
+                _logger.LogError(ex, "Error retrieving top {Limit} albums from {From} to {To}", limit, from, to);
+                throw new ApplicationException("Erreur lors de la récupération des albums les plus écoutés", ex);
+            }
         }
 
         public async Task<AlbumListening?> GetAlbumsWithAsync(string title, string artist, DateTime? from = null, DateTime? to = null)
         {
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(artist))
-                throw new ArgumentException("Album and artist parameters are required");
-
-            var collection = _database.GetCollection<BsonDocument>("listening");
-
-            // Construction du filtre pour inclure les featurings
-            var filter = Builders<BsonDocument>.Filter.And(
-                BuildDateFilter(from, to),
-                Builders<BsonDocument>.Filter.Regex("Album", new BsonRegularExpression($"^{Regex.Escape(title)}$", "i")),
-                Builders<BsonDocument>.Filter.Regex("Artist",
-                    new BsonRegularExpression($"(^|[,&]\\s*){Regex.Escape(artist)}([,&]|$)", "i")),
-                Builders<BsonDocument>.Filter.Exists("Track"),
-                Builders<BsonDocument>.Filter.Ne("Track", "")
-            );
-
-            var pipeline = new[]
             {
-        // Étape 1: Filtrer les documents correspondants
-        PipelineStageDefinitionBuilder.Match(filter),
+                throw new ArgumentException("Le titre et l'artiste sont requis");
+            }
 
-        // Étape 2: Extraire l'artiste principal (celui recherché)
-        new BsonDocument("$addFields",
-            new BsonDocument("MainArtist", artist)),
-
-        // Étape 3: Grouper par piste
-        new BsonDocument("$group",
-            new BsonDocument
+            try
             {
-                { "_id", "$Track" },
-                { "Count", new BsonDocument("$sum", 1) },
-                { "Album", new BsonDocument("$first", "$Album") },
-                { "Artist", new BsonDocument("$first", "$MainArtist") }
-            }),
+                var pipeline = BuildAlbumDetailsPipeline(title, artist, from, to);
+                var result = await _bsonCollection.Aggregate<BsonDocument>(pipeline).FirstOrDefaultAsync();
 
-            // Étape 4: Regrouper toutes les pistes
-            new BsonDocument("$group",
-                new BsonDocument
+                if (result == null)
                 {
-                    { "_id", new BsonDocument
-                        {
-                            { "Album", "$Album" },
-                            { "Artist", "$Artist" }
-                        }
-                    },
-                    { "Tracks", new BsonDocument("$push",
-                        new BsonDocument
-                        {
-                            { "Track", "$_id" },
-                            { "Count", "$Count" }
-                        })},
-                    { "TotalCount", new BsonDocument("$sum", "$Count") }
-                }),
+                    _logger.LogDebug("Album not found: {Title} by {Artist}", title, artist);
+                    return null;
+                }
 
-             // Étape 5: Projeter le résultat final
-            new BsonDocument("$project",
-                new BsonDocument
-                {
-                    { "Title", "$_id.Album" },
-                    { "Artist", "$_id.Artist" },
-                    { "StreamCount", "$TotalCount" },
-                    { "StreamCountByTrack", "$Tracks" },
-                    { "_id", 0 }
-                })
-            };
-
-            var result = await collection.Aggregate<BsonDocument>(pipeline).FirstOrDefaultAsync();
-
-            if (result == null)
-                return null;
-
-            return new AlbumListening
+                return MapBsonToAlbumListening(result);
+            }
+            catch (Exception ex)
             {
-                Title = result["Title"].AsString,
-                Artist = result["Artist"].AsString,
-                StreamCount = result["StreamCount"].AsInt32,
-                StreamCountByTrack = result["StreamCountByTrack"].AsBsonArray
-                    .Select(t => new KeyValuePair<string, int>(
-                        t["Track"].AsString,
-                        t["Count"].AsInt32))
-                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
-            };
-        }        
+                _logger.LogError(ex, "Error retrieving album {Title} by {Artist}", title, artist);
+                throw new ApplicationException($"Erreur lors de la récupération de l'album '{title}'", ex);
+            }
+        }
 
         public async Task<List<ArtistListening>> GetTopArtistWithAsync(int limit, DateTime? from = null, DateTime? to = null)
         {
-            // Validation des paramètres
-            if (limit <= 0 || limit > 100)
-                limit = 5;
+            limit = ValidateLimit(limit);
 
-            var collection = _database.GetCollection<BsonDocument>("listening");
-
-            // Construction du filtre de base avec dates
-            var dateFilter = BuildDateFilter(from, to);
-
-            // Filtre complet incluant la vérification des artistes non vides
-            var completeFilter = Builders<BsonDocument>.Filter.And(
-                dateFilter,
-                Builders<BsonDocument>.Filter.Exists("Artist"),
-                Builders<BsonDocument>.Filter.Ne("Artist", BsonNull.Value),
-                Builders<BsonDocument>.Filter.Ne("Artist", "")
-            );
-
-            var pipeline = new[]
+            try
             {
-        // Étape 1: Filtrer les documents
-        PipelineStageDefinitionBuilder.Match(completeFilter),
+                var pipeline = BuildTopArtistsPipeline(limit, from, to);
+                var results = await _bsonCollection.Aggregate<BsonDocument>(pipeline).ToListAsync();
 
-        // Étape 2: Projeter uniquement le champ nécessaire pour améliorer les performances
-        new BsonDocument("$project",
-            new BsonDocument
+                var artistListenings = results.Select(MapBsonToArtistListening).ToList();
+                _logger.LogDebug("Retrieved {Count} top artists", artistListenings.Count);
+                return artistListenings;
+            }
+            catch (Exception ex)
             {
-                { "Artist", 1 },
-                { "NormalizedArtist", new BsonDocument("$trim", new BsonDocument("input", "$Artist")) }
-            }),
-
-        // Étape 3: Normaliser les artistes (premier artiste avant virgule, trimé)
-        new BsonDocument("$addFields",
-            new BsonDocument("PrimaryArtist",
-                new BsonDocument("$let",
-                    new BsonDocument
-                    {
-                        { "vars",
-                            new BsonDocument("artists",
-                            new BsonDocument("$split", new BsonArray { "$NormalizedArtist", "," }))
-                        },
-                        { "in",
-                            new BsonDocument("$trim",
-                                new BsonDocument("input",
-                                    new BsonDocument("$cond",
-                                        new BsonArray
-                                        {
-                                            new BsonDocument("$gt", new BsonArray { new BsonDocument("$size", "$$artists"), 0 }),
-                                            new BsonDocument("$arrayElemAt", new BsonArray { "$$artists", 0 }),
-                                            ""
-                                        }
-                                    )))
-                        }
-                    }
-                ))),
-
-        // Étape 4: Grouper par artiste principal
-        new BsonDocument("$group",
-            new BsonDocument
-            {
-                { "_id", "$PrimaryArtist" },
-                { "TotalCount", new BsonDocument("$sum", 1) }
-            }),
-
-        // Étape 5: Trier par nombre d'écoutes décroissant
-        new BsonDocument("$sort", new BsonDocument("TotalCount", -1)),
-
-        // Étape 6: Limiter aux résultats demandés
-        new BsonDocument("$limit", limit),
-
-        // Étape 7: Projeter le résultat final
-        new BsonDocument("$project",
-            new BsonDocument
-            {
-                { "Name", "$_id" },
-                { "StreamCount", "$TotalCount" },
-                { "_id", 0 }
-            })
-    };
-
-            var results = await collection.Aggregate<BsonDocument>(pipeline).ToListAsync();
-
-            return results.Select(doc => new ArtistListening
-            {
-                Name = doc["Name"].AsString,
-                StreamCount = doc["StreamCount"].AsInt32
-            }).ToList();
+                _logger.LogError(ex, "Error retrieving top {Limit} artists from {From} to {To}", limit, from, to);
+                throw new ApplicationException("Erreur lors de la récupération des artistes les plus écoutés", ex);
+            }
         }
-
 
         public async Task<ArtistListening?> GetArtistWithAsync(string artist, DateTime? from = null, DateTime? to = null)
         {
             if (string.IsNullOrWhiteSpace(artist))
-                throw new ArgumentException("Artist parameter is required");
-
-            var collection = _database.GetCollection<BsonDocument>("listening");
-
-            // Construction du filtre pour inclure les featurings
-            var filter = Builders<BsonDocument>.Filter.And(
-                BuildDateFilter(from, to),
-                Builders<BsonDocument>.Filter.Regex("Artist", new BsonRegularExpression($"(^|[,&]\\s*){Regex.Escape(artist)}([,&]|$)", "i")),
-                Builders<BsonDocument>.Filter.Exists("Track"),
-                Builders<BsonDocument>.Filter.Ne("Track", "")
-            );
-
-            var pipeline = new[]
-    {
-        // Étape 1: Filtrer par date et pistes valides
-        PipelineStageDefinitionBuilder.Match(filter),
-
-        // Étape 2: Ajouter un champ pour vérifier la correspondance exacte avec l'artiste
-        new BsonDocument("$addFields",
-            new BsonDocument
             {
-                { "IsMatch",
-                    new BsonDocument("$eq",
-                        new BsonArray {
-                            "$Artist",
-                            artist
-                        })
-                },
-                { "IsFeaturing",
-                    new BsonDocument("$regexMatch",
-                        new BsonDocument
-                        {
-                            { "input", "$Artist" },
-                            { "regex", $"(^|,\\s*){Regex.Escape(artist)}(\\s*,|$)" },
-                            { "options", "i" }
-                        })
+                throw new ArgumentException("Le nom de l'artiste est requis");
+            }
+
+            try
+            {
+                var pipeline = BuildArtistDetailsPipeline(artist, from, to);
+                var result = await _bsonCollection.Aggregate<BsonDocument>(pipeline).FirstOrDefaultAsync();
+
+                if (result == null)
+                {
+                    _logger.LogDebug("Artist not found: {Artist}", artist);
+                    return null;
                 }
+
+                return MapBsonToArtistListening(result);
             }
-        ),
-
-        // Étape 3: Filtrer les documents où l'artiste est présent
-        new BsonDocument("$match",
-            new BsonDocument("$or", new BsonArray
+            catch (Exception ex)
             {
-                new BsonDocument("IsMatch", true),
-                new BsonDocument("IsFeaturing", true)
-            })
-        ),
-
-        // Étape 4: Grouper par piste
-        new BsonDocument("$group",
-            new BsonDocument
-            {
-                { "_id", "$Track" },
-                { "Count", new BsonDocument("$sum", 1) }
+                _logger.LogError(ex, "Error retrieving artist {Artist}", artist);
+                throw new ApplicationException($"Erreur lors de la récupération de l'artiste '{artist}'", ex);
             }
-        ),
-
-        // Étape 5: Regrouper toutes les pistes dans un array
-        new BsonDocument("$group",
-            new BsonDocument
-            {
-                { "_id", artist },
-                { "Tracks", new BsonDocument("$push",
-                    new BsonDocument
-                    {
-                        { "Track", "$_id" },
-                        { "Count", "$Count" }
-                    })
-                },
-                { "TotalCount", new BsonDocument("$sum", "$Count") }
-            }
-        ),
-
-        // Étape 6: Projeter le résultat final
-        new BsonDocument("$project",
-            new BsonDocument
-            {
-                { "Name", "$_id" },
-                { "StreamCount", "$TotalCount" },
-                { "StreamCountByTrack", "$Tracks" },
-                { "_id", 0 }
-            }
-        )
-    };
-
-            var result = await collection.Aggregate<BsonDocument>(pipeline).FirstOrDefaultAsync();
-
-            if (result == null)
-                return null;
-
-            return new ArtistListening
-            {
-                Name = result["Name"].AsString,
-                StreamCount = result["StreamCount"].AsInt32,
-                StreamCountByTrack = result["StreamCountByTrack"].AsBsonArray
-                    .Select(t => new KeyValuePair<string, int>(
-                        t["Track"].AsString,
-                        t["Count"].AsInt32))
-                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
-            };
         }
 
         public async Task<List<TrackListening>> GetTopTrackWithAsync(int limit, DateTime? from = null, DateTime? to = null)
         {
-            // Validation des paramètres
-            if (limit <= 0 || limit > 100)
-                limit = 5;
+            limit = ValidateLimit(limit);
 
-            var collection = _database.GetCollection<BsonDocument>("listening");
-
-            // Construction du filtre de base avec dates
-            var dateFilter = BuildDateFilter(from, to);
-
-            // Filtre complet incluant la vérification des champs obligatoires
-            var completeFilter = Builders<BsonDocument>.Filter.And(
-                dateFilter,
-                Builders<BsonDocument>.Filter.Exists("Track"),
-                Builders<BsonDocument>.Filter.Ne("Track", BsonNull.Value),
-                Builders<BsonDocument>.Filter.Ne("Track", ""),
-                Builders<BsonDocument>.Filter.Exists("Artist"),
-                Builders<BsonDocument>.Filter.Ne("Artist", BsonNull.Value),
-                Builders<BsonDocument>.Filter.Ne("Artist", ""),
-                Builders<BsonDocument>.Filter.Exists("Date")
-            );
-
-            var pipeline = new[]
+            try
             {
-        // Étape 1: Filtrer les documents
-        PipelineStageDefinitionBuilder.Match(completeFilter),
+                var pipeline = BuildTopTracksPipeline(limit, from, to);
+                var results = await _bsonCollection.Aggregate<BsonDocument>(pipeline).ToListAsync();
 
-        // Étape 2: Normaliser les données et projeter les champs nécessaires
-        new BsonDocument("$addFields",
-            new BsonDocument
+                var trackListenings = results.Select(MapBsonToTrackListening).ToList();
+                _logger.LogDebug("Retrieved {Count} top tracks", trackListenings.Count);
+                return trackListenings;
+            }
+            catch (Exception ex)
             {
-                { "NormalizedTrack", new BsonDocument("$trim", new BsonDocument("input", "$Track")) },
-                { "PrimaryArtist", new BsonDocument("$trim",
-                    new BsonDocument("input",
-                        new BsonDocument("$arrayElemAt",
-                            new BsonArray { new BsonDocument("$split", new BsonArray { "$Artist", "," }), 0 }))) },
-                { "NormalizedAlbum", new BsonDocument("$ifNull",
-                    new BsonArray { "$Album", "Unknown Album" }) }
-            }),
-
-        // Étape 3: Trier par date d'écoute décroissante pour avoir la dernière date en premier
-        new BsonDocument("$sort", new BsonDocument("Date", -1)),
-
-        // Étape 4: Grouper par Morceau + Artiste + Album
-        new BsonDocument("$group",
-            new BsonDocument
-            {
-                { "_id", new BsonDocument
-                    {
-                        { "Track", "$NormalizedTrack" },
-                        { "Artist", "$PrimaryArtist" },
-                        { "Album", "$NormalizedAlbum" }
-                    }
-                },
-                { "StreamCount", new BsonDocument("$sum", 1) },
-                { "LastListening", new BsonDocument("$first", "$Date") }
-            }),
-
-        // Étape 5: Trier par nombre d'écoutes décroissant
-        new BsonDocument("$sort", new BsonDocument("StreamCount", -1)),
-
-        // Étape 6: Limiter aux résultats demandés
-        new BsonDocument("$limit", limit),
-
-        // Étape 7: Projeter le résultat final
-        new BsonDocument("$project",
-            new BsonDocument
-            {
-                { "Name", "$_id.Track" },
-                { "Artist", "$_id.Artist" },
-                { "Album", "$_id.Album" },
-                { "StreamCount", 1 },
-                { "LastListening", 1 },
-                { "_id", 0 }
-            })
-    };
-
-            var results = await collection.Aggregate<BsonDocument>(pipeline).ToListAsync();
-
-            return [.. results.Select(doc => new TrackListening
-            {
-                Name = doc["Name"].AsString,
-                Artist = doc["Artist"].AsString,
-                Album = doc["Album"].AsString,
-                StreamCount = doc["StreamCount"].AsInt32,
-                LastListening = doc["LastListening"].ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            })];
+                _logger.LogError(ex, "Error retrieving top {Limit} tracks from {From} to {To}", limit, from, to);
+                throw new ApplicationException("Erreur lors de la récupération des morceaux les plus écoutés", ex);
+            }
         }
 
-        private static FilterDefinition<BsonDocument> BuildDateFilter(DateTime? from, DateTime? to)
+        #region Private Methods - Validation and Filter Building
+
+        private static int ValidateLimit(int limit)
+        {
+            return limit <= 0 || limit > 100 ? 10 : limit;
+        }
+
+        private FilterDefinition<BsonDocument> BuildDateFilter(DateTime? from, DateTime? to)
         {
             var builder = Builders<BsonDocument>.Filter;
             var filter = builder.Empty;
@@ -546,5 +248,389 @@ namespace MyDeezerStats.Infrastructure.Mongo.Ecoutes
 
             return filter;
         }
+
+        private FilterDefinition<BsonDocument> BuildCompleteAlbumFilter(DateTime? from, DateTime? to)
+        {
+            var dateFilter = BuildDateFilter(from, to);
+
+            return Builders<BsonDocument>.Filter.And(
+                dateFilter,
+                Builders<BsonDocument>.Filter.Exists("Album"),
+                Builders<BsonDocument>.Filter.Ne("Album", BsonNull.Value),
+                Builders<BsonDocument>.Filter.Ne("Album", ""),
+                Builders<BsonDocument>.Filter.Exists("Track"),
+                Builders<BsonDocument>.Filter.Ne("Track", BsonNull.Value),
+                Builders<BsonDocument>.Filter.Ne("Track", "")
+            );
+        }
+
+        private FilterDefinition<BsonDocument> BuildCompleteArtistFilter(DateTime? from, DateTime? to)
+        {
+            var dateFilter = BuildDateFilter(from, to);
+
+            return Builders<BsonDocument>.Filter.And(
+                dateFilter,
+                Builders<BsonDocument>.Filter.Exists("Artist"),
+                Builders<BsonDocument>.Filter.Ne("Artist", BsonNull.Value),
+                Builders<BsonDocument>.Filter.Ne("Artist", "")
+            );
+        }
+
+        private FilterDefinition<BsonDocument> BuildCompleteTrackFilter(DateTime? from, DateTime? to)
+        {
+            var dateFilter = BuildDateFilter(from, to);
+
+            return Builders<BsonDocument>.Filter.And(
+                dateFilter,
+                Builders<BsonDocument>.Filter.Exists("Track"),
+                Builders<BsonDocument>.Filter.Ne("Track", BsonNull.Value),
+                Builders<BsonDocument>.Filter.Ne("Track", ""),
+                Builders<BsonDocument>.Filter.Exists("Artist"),
+                Builders<BsonDocument>.Filter.Ne("Artist", BsonNull.Value),
+                Builders<BsonDocument>.Filter.Ne("Artist", ""),
+                Builders<BsonDocument>.Filter.Exists("Date")
+            );
+        }
+
+        #endregion
+
+        #region Private Methods - Pipeline Building
+
+        private PipelineDefinition<BsonDocument, BsonDocument> BuildTopAlbumsPipeline(int limit, DateTime? from, DateTime? to)
+        {
+            var completeFilter = BuildCompleteAlbumFilter(from, to);
+
+            return new[]
+            {
+                PipelineStageDefinitionBuilder.Match(completeFilter),
+                new BsonDocument("$project", new BsonDocument
+                {
+                    { "Album", 1 },
+                    { "Artist", 1 },
+                    { "NormalizedAlbum", new BsonDocument("$toLower",
+                        new BsonDocument("$trim", new BsonDocument("input", "$Album"))) },
+                    { "NormalizedArtist", new BsonDocument("$toLower",
+                        new BsonDocument("$trim", new BsonDocument("input", "$Artist"))) }
+                }),
+                new BsonDocument("$addFields", new BsonDocument("PrimaryArtist",
+                    new BsonDocument("$let", new BsonDocument
+                    {
+                        { "vars", new BsonDocument("artists",
+                            new BsonDocument("$split", new BsonArray { "$NormalizedArtist", "," })) },
+                        { "in", new BsonDocument("$trim", new BsonDocument("input",
+                            new BsonDocument("$cond", new BsonArray
+                            {
+                                new BsonDocument("$gt", new BsonArray {
+                                    new BsonDocument("$size", "$$artists"), 0 }),
+                                new BsonDocument("$arrayElemAt", new BsonArray { "$$artists", 0 }),
+                                ""
+                            }))) }
+                    }))
+                ),
+                new BsonDocument("$group", new BsonDocument
+                {
+                    { "_id", new BsonDocument
+                            {
+                                { "Album", "$NormalizedAlbum" },
+                                { "Artist", "$PrimaryArtist" }
+                            }
+                    },
+                    { "TotalCount", new BsonDocument("$sum", 1) },
+                    { "OriginalTitle", new BsonDocument("$first", "$Album") },
+                    { "OriginalArtist", new BsonDocument("$first", "$Artist") }
+                }),
+                new BsonDocument("$sort", new BsonDocument("TotalCount", -1)),
+                new BsonDocument("$limit", limit),
+                new BsonDocument("$project", new BsonDocument
+                {
+                    { "Title", "$OriginalTitle" },
+                    { "Artist", "$OriginalArtist" },
+                    { "StreamCount", "$TotalCount" },
+                    { "_id", 0 }
+                })
+            };
+        }
+
+        private PipelineDefinition<BsonDocument, BsonDocument> BuildAlbumDetailsPipeline(string title, string artist, DateTime? from, DateTime? to)
+        {
+            var filter = Builders<BsonDocument>.Filter.And(
+                BuildDateFilter(from, to),
+                Builders<BsonDocument>.Filter.Regex("Album", new BsonRegularExpression($"^{Regex.Escape(title)}$", "i")),
+                Builders<BsonDocument>.Filter.Regex("Artist",
+                    new BsonRegularExpression($"(^|[,&]\\s*){Regex.Escape(artist)}([,&]|$)", "i")),
+                Builders<BsonDocument>.Filter.Exists("Track"),
+                Builders<BsonDocument>.Filter.Ne("Track", "")
+            );
+
+            return new[]
+            {
+                PipelineStageDefinitionBuilder.Match(filter),
+                new BsonDocument("$addFields",
+                    new BsonDocument("MainArtist", artist)),
+                new BsonDocument("$group",
+                    new BsonDocument
+                    {
+                        { "_id", "$Track" },
+                        { "Count", new BsonDocument("$sum", 1) },
+                        { "Album", new BsonDocument("$first", "$Album") },
+                        { "Artist", new BsonDocument("$first", "$MainArtist") }
+                    }),
+                new BsonDocument("$group",
+                    new BsonDocument
+                    {
+                        { "_id", new BsonDocument
+                            {
+                                { "Album", "$Album" },
+                                { "Artist", "$Artist" }
+                            }
+                        },
+                        { "Tracks", new BsonDocument("$push",
+                            new BsonDocument
+                            {
+                                { "Track", "$_id" },
+                                { "Count", "$Count" }
+                            })},
+                        { "TotalCount", new BsonDocument("$sum", "$Count") }
+                    }),
+                 new BsonDocument("$project",
+                    new BsonDocument
+                    {
+                        { "Title", "$_id.Album" },
+                        { "Artist", "$_id.Artist" },
+                        { "StreamCount", "$TotalCount" },
+                        { "StreamCountByTrack", "$Tracks" },
+                        { "_id", 0 }
+                    })
+            };
+        }
+
+        private PipelineDefinition<BsonDocument, BsonDocument> BuildTopArtistsPipeline(int limit, DateTime? from, DateTime? to)
+        {
+            var completeFilter = BuildCompleteArtistFilter(from, to);
+
+            return new[]
+            {
+                PipelineStageDefinitionBuilder.Match(completeFilter),
+                new BsonDocument("$project",
+                    new BsonDocument
+                    {
+                        { "Artist", 1 },
+                        { "NormalizedArtist", new BsonDocument("$trim", new BsonDocument("input", "$Artist")) }
+                    }),
+                new BsonDocument("$addFields",
+                    new BsonDocument("PrimaryArtist",
+                        new BsonDocument("$let",
+                            new BsonDocument
+                            {
+                                { "vars",
+                                    new BsonDocument("artists",
+                                    new BsonDocument("$split", new BsonArray { "$NormalizedArtist", "," }))
+                                },
+                                { "in",
+                                    new BsonDocument("$trim",
+                                        new BsonDocument("input",
+                                            new BsonDocument("$cond",
+                                                new BsonArray
+                                                {
+                                                    new BsonDocument("$gt", new BsonArray { new BsonDocument("$size", "$$artists"), 0 }),
+                                                    new BsonDocument("$arrayElemAt", new BsonArray { "$$artists", 0 }),
+                                                    ""
+                                                }
+                                            )))
+                                }
+                            }
+                        ))),
+                new BsonDocument("$addFields",
+                    new BsonDocument("PrimaryArtistNormalized",
+                        new BsonDocument("$toLower", "$PrimaryArtist"))),
+                new BsonDocument("$group",
+                    new BsonDocument
+                    {
+                        { "_id", "$PrimaryArtistNormalized" },
+                        { "TotalCount", new BsonDocument("$sum", 1) },
+                        { "OriginalName", new BsonDocument("$first", "$PrimaryArtist") }
+                    }),
+                new BsonDocument("$sort", new BsonDocument("TotalCount", -1)),
+                new BsonDocument("$limit", limit),
+                new BsonDocument("$project",
+                    new BsonDocument
+                    {
+                        { "Name", "$OriginalName" },
+                        { "StreamCount", "$TotalCount" },
+                        { "_id", 0 }
+                    })
+            };
+        }
+
+        private PipelineDefinition<BsonDocument, BsonDocument> BuildArtistDetailsPipeline(string artist, DateTime? from, DateTime? to)
+        {
+            var filter = Builders<BsonDocument>.Filter.And(
+                BuildDateFilter(from, to),
+                Builders<BsonDocument>.Filter.Regex("Artist", new BsonRegularExpression($"(^|[,&]\\s*){Regex.Escape(artist)}([,&]|$)", "i")),
+                Builders<BsonDocument>.Filter.Exists("Track"),
+                Builders<BsonDocument>.Filter.Ne("Track", "")
+            );
+
+            return new[]
+            {
+                PipelineStageDefinitionBuilder.Match(filter),
+                new BsonDocument("$addFields",
+                    new BsonDocument
+                    {
+                        { "IsMatch",
+                            new BsonDocument("$eq",
+                                new BsonArray {
+                                    "$Artist",
+                                    artist
+                                })
+                        },
+                        { "IsFeaturing",
+                            new BsonDocument("$regexMatch",
+                                new BsonDocument
+                                {
+                                    { "input", "$Artist" },
+                                    { "regex", $"(^|,\\s*){Regex.Escape(artist)}(\\s*,|$)" },
+                                    { "options", "i" }
+                                })
+                        }
+                    }
+                ),
+                new BsonDocument("$match",
+                    new BsonDocument("$or", new BsonArray
+                    {
+                        new BsonDocument("IsMatch", true),
+                        new BsonDocument("IsFeaturing", true)
+                    })
+                ),
+                new BsonDocument("$group",
+                    new BsonDocument
+                    {
+                        { "_id", "$Track" },
+                        { "Count", new BsonDocument("$sum", 1) }
+                    }
+                ),
+                new BsonDocument("$group",
+                    new BsonDocument
+                    {
+                        { "_id", artist },
+                        { "Tracks", new BsonDocument("$push",
+                            new BsonDocument
+                            {
+                                { "Track", "$_id" },
+                                { "Count", "$Count" }
+                            })
+                        },
+                        { "TotalCount", new BsonDocument("$sum", "$Count") }
+                    }
+                ),
+                new BsonDocument("$project",
+                    new BsonDocument
+                    {
+                        { "Name", "$_id" },
+                        { "StreamCount", "$TotalCount" },
+                        { "StreamCountByTrack", "$Tracks" },
+                        { "_id", 0 }
+                    }
+                )
+            };
+        }
+
+        private PipelineDefinition<BsonDocument, BsonDocument> BuildTopTracksPipeline(int limit, DateTime? from, DateTime? to)
+        {
+            var completeFilter = BuildCompleteTrackFilter(from, to);
+
+            return new[]
+            {
+                PipelineStageDefinitionBuilder.Match(completeFilter),
+                new BsonDocument("$addFields",
+                    new BsonDocument
+                    {
+                        { "NormalizedTrack", new BsonDocument("$trim", new BsonDocument("input", "$Track")) },
+                        { "PrimaryArtist", new BsonDocument("$trim",
+                            new BsonDocument("input",
+                                new BsonDocument("$arrayElemAt",
+                                    new BsonArray { new BsonDocument("$split", new BsonArray { "$Artist", "," }), 0 }))) }
+                    }),
+                new BsonDocument("$addFields",
+                    new BsonDocument
+                    {
+                        { "NormalizedTrackLower", new BsonDocument("$toLower", "$NormalizedTrack") },
+                        { "NormalizedArtistLower", new BsonDocument("$toLower", "$PrimaryArtist") }
+                    }),
+                new BsonDocument("$sort", new BsonDocument("Date", -1)),
+                new BsonDocument("$group",
+                    new BsonDocument
+                    {
+                        { "_id", new BsonDocument
+                            {
+                                { "Track", "$NormalizedTrackLower" },
+                                { "Artist", "$NormalizedArtistLower" }
+                            }
+                        },
+                        { "StreamCount", new BsonDocument("$sum", 1) },
+                        { "LastListening", new BsonDocument("$first", "$Date") },
+                        { "OriginalTrackName", new BsonDocument("$first", "$NormalizedTrack") },
+                        { "OriginalArtistName", new BsonDocument("$first", "$PrimaryArtist") }
+                    }),
+                new BsonDocument("$sort", new BsonDocument("StreamCount", -1)),
+                new BsonDocument("$limit", limit),
+                new BsonDocument("$project",
+                    new BsonDocument
+                    {
+                        { "Name", "$OriginalTrackName" },
+                        { "Artist", "$OriginalArtistName" },
+                        { "StreamCount", 1 },
+                        { "LastListening", 1 },
+                        { "_id", 0 }
+                    })
+            };
+        }
+
+        #endregion
+
+        #region Private Methods - Mapping
+
+        private static AlbumListening MapBsonToAlbumListening(BsonDocument doc)
+        {
+            return new AlbumListening
+            {
+                Title = doc["Title"].AsString,
+                Artist = doc["Artist"].AsString,
+                StreamCount = doc["StreamCount"].AsInt32,
+                StreamCountByTrack = doc["StreamCountByTrack"]?.AsBsonArray?
+                    .Select(t => new KeyValuePair<string, int>(
+                        t["Track"].AsString,
+                        t["Count"].AsInt32))
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value) ?? new Dictionary<string, int>()
+            };
+        }
+
+        private static ArtistListening MapBsonToArtistListening(BsonDocument doc)
+        {
+            return new ArtistListening
+            {
+                Name = doc["Name"].AsString,
+                StreamCount = doc["StreamCount"].AsInt32,
+                StreamCountByTrack = doc["StreamCountByTrack"]?.AsBsonArray?
+                    .Select(t => new KeyValuePair<string, int>(
+                        t["Track"].AsString,
+                        t["Count"].AsInt32))
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value) ?? new Dictionary<string, int>()
+            };
+        }
+
+        private static TrackListening MapBsonToTrackListening(BsonDocument doc)
+        {
+            return new TrackListening
+            {
+                Name = doc["Name"].AsString,
+                Artist = doc["Artist"].AsString,
+                Album = string.Empty,
+                StreamCount = doc["StreamCount"].AsInt32,
+                LastListening = doc["LastListening"].ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            };
+        }
+
+        #endregion
     }
 }

@@ -44,12 +44,44 @@ public class LastFmTrack
 
     [JsonPropertyName("@attr")]
     public NowPlayingAttr? NowPlaying { get; set; }
+
+    [JsonPropertyName("duration")]
+    [JsonConverter(typeof(DurationConverter))]
+    public string Duration { get; set; } = string.Empty;
 }
 
 public class NowPlayingAttr
 {
     [JsonPropertyName("nowplaying")]
     public string NowPlaying { get; set; } = string.Empty;
+}
+
+// Convertisseur pour la durée
+public class DurationConverter : JsonConverter<string>
+{
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            // Si la durée est fournie comme nombre (millisecondes)
+            if (reader.TryGetInt64(out long milliseconds))
+            {
+                return milliseconds.ToString();
+            }
+        }
+        else if (reader.TokenType == JsonTokenType.String)
+        {
+            // Si la durée est fournie comme string
+            return reader.GetString() ?? string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value);
+    }
 }
 
 // Convertisseur pour extraire directement le nom de l'artiste

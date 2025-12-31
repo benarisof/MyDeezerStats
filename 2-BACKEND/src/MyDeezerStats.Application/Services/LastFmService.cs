@@ -4,7 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 
 
-namespace MyDeezerStats.Application.LastFmServices
+namespace MyDeezerStats.Application.Services
 {
     public class LastFmService : ILastFmService
     {
@@ -50,7 +50,14 @@ namespace MyDeezerStats.Application.LastFmServices
                 {
                     if (track.ListenDate >= sinceDate)
                     {
-                        allTracks.Add(new ListeningDto { Album = track.Album, Artist = track.Artist, Track = track.Track, Date = (DateTime)track.ListenDate });
+                        allTracks.Add(new ListeningDto
+                        {
+                            Album = track.Album,
+                            Artist = track.Artist,
+                            Track = track.Track,
+                            Date = (DateTime)track.ListenDate,
+                            Duration = track.Duration 
+                        });
                     }
                     else
                     {
