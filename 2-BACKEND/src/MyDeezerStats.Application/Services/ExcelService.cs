@@ -4,12 +4,9 @@ using MyDeezerStats.Application.Interfaces;
 using MyDeezerStats.Domain.Entities;
 using MyDeezerStats.Domain.Entities.Excel;
 using MyDeezerStats.Domain.Repositories;
-using System;
-using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
+
 
 namespace MyDeezerStats.Application.Services
 {
@@ -18,7 +15,7 @@ namespace MyDeezerStats.Application.Services
         private readonly IListeningRepository _listeningRepository;
         private readonly ILogger<ExcelService> _logger;
 
-        // Configuration des colonnes Excel (basé sur votre structure)
+        // Configuration des colonnes Excel
         private readonly ExcelColumnMapping _columnMapping = new()
         {
             TitleColumn = 0,
@@ -41,43 +38,35 @@ namespace MyDeezerStats.Application.Services
             var stopwatch = Stopwatch.StartNew();
             var result = new ImportResult();
 
-            // Validation des paramètres
-            if (fileStream == null)
-                throw new ArgumentException("Le flux de fichier ne peut pas être null");
-
-            if (fileStream.Length == 0)
-                throw new ArgumentException("Le flux de fichier est vide");
+            if (fileStream == null || fileStream.Length == 0)
+                throw new ArgumentException("Le flux de fichier est invalide ou vide");
 
             if (batchSize <= 0 || batchSize > 10000)
                 throw new ArgumentException("La taille du lot doit être comprise entre 1 et 10000");
 
             try
             {
-                _logger.LogInformation(
-                    "Début du traitement du fichier Excel. Taille: {FileSize} bytes, Batch size: {BatchSize}",
-                    fileStream.Length, batchSize);
+                _logger.LogInformation("Début du traitement Excel. Taille: {Size} octets", fileStream.Length);
 
-                // Configuration pour ExcelDataReader (gestion des encodings)
                 System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
                 using var reader = ExcelReaderFactory.CreateReader(fileStream);
-
                 var dataSet = reader.AsDataSet(new ExcelDataSetConfiguration
                 {
                     ConfigureDataTable = _ => new ExcelDataTableConfiguration
                     {
                         UseHeaderRow = true,
-                        FilterRow = rowReader => !IsEmptyRow(rowReader) // Ignorer les lignes vides
+                        FilterRow = rowReader => !IsEmptyRow(rowReader)
                     }
                 });
 
-                if (dataSet.Tables.Count == 0)
-                    throw new InvalidOperationException("Le fichier Excel ne contient aucune feuille");
+                if (dataSet.Tables.Count <= 8)
+                    throw new InvalidOperationException("Le fichier Excel ne contient pas la feuille attendue à l'index 8");
 
-                var sheet = dataSet.Tables[0];
-                result.TotalRows = sheet.Rows.Count - 1; // Exclure l'en-tête
+                var sheet = dataSet.Tables[8];
+                result.TotalRows = sheet.Rows.Count; // Avec UseHeaderRow=true, Rows.Count est déjà le nombre de données
 
-                _logger.LogDebug("Feuille Excel chargée avec {RowCount} lignes de données", result.TotalRows);
+                _logger.LogDebug("Feuille chargée : {RowCount} lignes détectées", result.TotalRows);
 
                 await ProcessDataTable(sheet, result, batchSize);
 
@@ -85,22 +74,22 @@ namespace MyDeezerStats.Application.Services
                 result.ProcessingTime = stopwatch.Elapsed;
 
                 LogImportResult(result);
-
                 return result;
             }
             catch (Exception ex) when (ex is not ApplicationException)
             {
-                _logger.LogError(ex, "Erreur lors du traitement du fichier Excel");
-                throw new ApplicationException("Une erreur est survenue lors du traitement du fichier Excel", ex);
+                _logger.LogError(ex, "Erreur fatale lors du traitement Excel");
+                throw new ApplicationException("Erreur lors du traitement du fichier", ex);
             }
         }
 
-        private async Task ProcessDataTable(System.Data.DataTable sheet, ImportResult result, int batchSize)
+        private async Task ProcessDataTable(DataTable sheet, ImportResult result, int batchSize)
         {
             var listeningsBatch = new List<ListeningEntry>(batchSize);
             var rowProcessor = new RowProcessor(_columnMapping, _logger);
 
-            for (int i = 1; i < sheet.Rows.Count; i++) // Commencer à 1 pour sauter l'en-tête
+            // On commence à 0 car UseHeaderRow = true consomme déjà la première ligne
+            for (int i = 0; i < sheet.Rows.Count; i++)
             {
                 try
                 {
@@ -112,7 +101,7 @@ namespace MyDeezerStats.Application.Services
                         continue;
                     }
 
-                    var parseResult = rowProcessor.TryParseRow(row, i);
+                    var parseResult = rowProcessor.TryParseRow(row, i + 1);
 
                     if (parseResult.IsSuccess)
                     {
@@ -122,13 +111,9 @@ namespace MyDeezerStats.Application.Services
                     else
                     {
                         result.RowsSkipped++;
-                        result.Errors.Add($"Ligne {i}: {parseResult.ErrorMessage}");
-
-                        if (result.Errors.Count <= 50) // Limiter le nombre d'erreurs rapportées
-                            _logger.LogWarning("Ligne {LineNumber} ignorée: {Error}", i, parseResult.ErrorMessage);
+                        result.Errors.Add($"Ligne {i + 1}: {parseResult.ErrorMessage}");
                     }
 
-                    // Traitement par lot
                     if (listeningsBatch.Count >= batchSize)
                     {
                         await ProcessBatch(listeningsBatch, result);
@@ -137,217 +122,132 @@ namespace MyDeezerStats.Application.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Erreur inattendue lors du traitement de la ligne {LineNumber}", i);
+                    _logger.LogError(ex, "Erreur ligne {Line}", i + 1);
                     result.RowsSkipped++;
-                    result.Errors.Add($"Ligne {i}: Erreur inattendue - {ex.Message}");
                 }
             }
 
-            // Dernier batch
             if (listeningsBatch.Count > 0)
-            {
                 await ProcessBatch(listeningsBatch, result);
-            }
         }
 
         private async Task ProcessBatch(List<ListeningEntry> batch, ImportResult result)
         {
             try
             {
-                _logger.LogDebug("Traitement d'un lot de {BatchSize} enregistrements", batch.Count);
                 await _listeningRepository.InsertListeningsAsync(batch);
                 result.RowsImported += batch.Count;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erreur lors de l'insertion d'un lot de {BatchSize} enregistrements", batch.Count);
-                result.Errors.Add($"Erreur d'insertion pour un lot de {batch.Count} enregistrements: {ex.Message}");
+                _logger.LogError(ex, "Erreur insertion batch");
+                result.Errors.Add($"Erreur d'insertion batch: {ex.Message}");
                 result.RowsSkipped += batch.Count;
-                result.RowsImported -= batch.Count; // Ajuster le compteur
             }
         }
 
         private void LogImportResult(ImportResult result)
         {
-            if (result.Errors.Count > 0)
-            {
-                _logger.LogWarning(
-                    "Traitement terminé en {ProcessingTime} avec {Processed} lignes traitées, {Imported} importées, {Skipped} ignorées. {ErrorCount} erreurs.",
-                    result.ProcessingTime,
-                    result.RowsProcessed,
-                    result.RowsImported,
-                    result.RowsSkipped,
-                    result.Errors.Count);
-            }
-            else
-            {
-                _logger.LogInformation(
-                    "Traitement terminé avec succès en {ProcessingTime}. {Processed} lignes traitées, {Imported} importées, {Skipped} ignorées.",
-                    result.ProcessingTime,
-                    result.RowsProcessed,
-                    result.RowsImported,
-                    result.RowsSkipped);
-            }
+            _logger.LogInformation("Import terminé: {Imported}/{Total} lignes importées en {Time}",
+                result.RowsImported, result.TotalRows, result.ProcessingTime);
         }
 
         private static bool IsEmptyRow(IExcelDataReader reader)
         {
-            // Vérifie si la ligne est vide
             for (int i = 0; i < reader.FieldCount; i++)
-            {
-                if (!string.IsNullOrWhiteSpace(reader.GetValue(i)?.ToString()))
-                    return false;
-            }
+                if (reader.GetValue(i) != null) return false;
             return true;
         }
 
-        private static bool IsEmptyDataRow(System.Data.DataRow row)
+        private static bool IsEmptyDataRow(DataRow row)
         {
-            // Vérifie si la ligne de DataTable est vide
-            for (int i = 0; i < row.Table.Columns.Count; i++)
-            {
-                if (!string.IsNullOrWhiteSpace(row[i]?.ToString()))
-                    return false;
-            }
+            foreach (var item in row.ItemArray)
+                if (item != null && !string.IsNullOrWhiteSpace(item.ToString())) return false;
             return true;
         }
     }
 
-    // Classe dédiée au traitement des lignes
+    // --- LOGIQUE DE PARSING AVEC CONVERSION INT ---
+
     internal class RowProcessor
     {
         private readonly ExcelColumnMapping _columnMapping;
-        private readonly ILogger<ExcelService> _logger;
+        private readonly ILogger _logger;
 
-        public RowProcessor(ExcelColumnMapping columnMapping, ILogger<ExcelService> logger)
+        public RowProcessor(ExcelColumnMapping columnMapping, ILogger logger)
         {
             _columnMapping = columnMapping;
             _logger = logger;
         }
 
-        public ParseResult TryParseRow(System.Data.DataRow row, int lineNumber)
+        public ParseResult TryParseRow(DataRow row, int lineNumber)
         {
             try
             {
-                // Validation des colonnes requises
-                if (!ValidateRequiredColumns(row, out var validationError))
-                    return ParseResult.Failure(validationError!);
+                if (!ValidateRequiredColumns(row, out var error)) return ParseResult.Failure(error!);
 
                 var title = GetSafeString(row, _columnMapping.TitleColumn);
                 var artist = GetSafeString(row, _columnMapping.ArtistColumn);
                 var album = GetSafeString(row, _columnMapping.AlbumColumn);
-                var duration = GetSafeString(row, _columnMapping.DurationColumn);
 
-                // Validation des champs obligatoires
-                if (string.IsNullOrWhiteSpace(title))
-                    return ParseResult.Failure("Le titre de la piste est requis");
+                if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(artist))
+                    return ParseResult.Failure("Titre ou Artiste manquant");
 
-                if (string.IsNullOrWhiteSpace(artist))
-                    return ParseResult.Failure("L'artiste est requis");
+                if (!TryParseDate(row[_columnMapping.DateColumn], out var date))
+                    return ParseResult.Failure("Date invalide");
 
-                if (string.IsNullOrWhiteSpace(album))
-                    return ParseResult.Failure("L'album est requis");
+                if (!TryParseDuration(row[_columnMapping.DurationColumn], out int duration))
+                    return ParseResult.Failure("Format de durée invalide");
 
-                // Parse de la date
-                if (!TryParseDate(GetSafeString(row, _columnMapping.DateColumn), out var date))
-                    return ParseResult.Failure("Format de date invalide");
-
-                var listeningEntry = new ListeningEntry
+                return ParseResult.Success(new ListeningEntry
                 {
                     Track = title.Trim(),
                     Artist = artist.Trim(),
-                    Album = album.Trim(),
-                    Duration = duration?.Trim() ?? string.Empty,
+                    Album = album?.Trim() ?? "Unknown",
+                    Duration = duration,
                     Date = date
-                };
-
-                // Validation métier supplémentaire
-                if (!ValidateListeningEntry(listeningEntry, out var businessError))
-                    return ParseResult.Failure(businessError!);
-
-                return ParseResult.Success(listeningEntry);
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Erreur lors du parsing de la ligne {LineNumber}", lineNumber);
-                return ParseResult.Failure($"Erreur de parsing: {ex.Message}");
+                return ParseResult.Failure($"Erreur: {ex.Message}");
             }
         }
 
-        private bool ValidateRequiredColumns(System.Data.DataRow row, out string? error)
+        private bool TryParseDuration(object value, out int duration)
         {
-            var requiredColumns = new[]
-            {
-                _columnMapping.TitleColumn,
-                _columnMapping.ArtistColumn,
-                _columnMapping.AlbumColumn,
-                _columnMapping.DateColumn
-            };
-
-            foreach (var colIndex in requiredColumns)
-            {
-                if (colIndex >= row.Table.Columns.Count)
-                {
-                    error = $"Colonne manquante à l'index {colIndex}";
-                    return false;
-                }
-            }
-
-            error = null;
-            return true;
+            duration = 0;
+            if (value == null || value == DBNull.Value) return true;
+            if (value is double d) { duration = (int)Math.Round(d); return true; }
+            if (value is int i) { duration = i; return true; }
+            return int.TryParse(value.ToString(), out duration);
         }
 
-        private static string? GetSafeString(System.Data.DataRow row, int columnIndex)
-        {
-            if (columnIndex >= row.Table.Columns.Count)
-                return null;
-
-            var value = row[columnIndex];
-            return value?.ToString()?.Trim();
-        }
-
-        private static bool TryParseDate(string? dateString, out DateTime date)
+        private bool TryParseDate(object value, out DateTime date)
         {
             date = DateTime.MinValue;
-
-            if (string.IsNullOrWhiteSpace(dateString))
-                return false;
-
-            return DateTime.TryParse(dateString, out date);
+            if (value == null || value == DBNull.Value) return false;
+            if (value is DateTime dt) { date = dt; return true; }
+            return DateTime.TryParse(value.ToString(), out date);
         }
 
-        private static bool ValidateListeningEntry(ListeningEntry entry, out string? error)
+        private bool ValidateRequiredColumns(DataRow row, out string? error)
         {
-            if (entry.Date == DateTime.MinValue || entry.Date > DateTime.Now.AddDays(1))
-            {
-                error = "Date invalide";
-                return false;
-            }
-
-            if (entry.Track.Length > 500)
-            {
-                error = "Le titre de la piste est trop long";
-                return false;
-            }
-
-            if (entry.Artist.Length > 300)
-            {
-                error = "Le nom de l'artiste est trop long";
-                return false;
-            }
-
-            if (entry.Album.Length > 300)
-            {
-                error = "Le nom de l'album est trop long";
-                return false;
-            }
-
             error = null;
+            int maxCol = Math.Max(_columnMapping.DateColumn, _columnMapping.DurationColumn);
+            if (row.Table.Columns.Count <= maxCol)
+            {
+                error = "Colonnes manquantes dans le fichier";
+                return false;
+            }
             return true;
         }
+
+        private static string? GetSafeString(DataRow row, int col) => row[col]?.ToString();
     }
 
-    // Classes de support
+    // --- CLASSES DE SUPPORT ---
+
     internal class ExcelColumnMapping
     {
         public int TitleColumn { get; set; }
@@ -362,22 +262,8 @@ namespace MyDeezerStats.Application.Services
         public bool IsSuccess { get; }
         public ListeningEntry? ListeningEntry { get; }
         public string? ErrorMessage { get; }
-
-        private ParseResult(bool isSuccess, ListeningEntry? listeningEntry, string? errorMessage)
-        {
-            IsSuccess = isSuccess;
-            ListeningEntry = listeningEntry;
-            ErrorMessage = errorMessage;
-        }
-
-        public static ParseResult Success(ListeningEntry listeningEntry)
-        {
-            return new ParseResult(true, listeningEntry, null);
-        }
-
-        public static ParseResult Failure(string errorMessage)
-        {
-            return new ParseResult(false, null, errorMessage);
-        }
+        private ParseResult(bool s, ListeningEntry? e, string? m) { IsSuccess = s; ListeningEntry = e; ErrorMessage = m; }
+        public static ParseResult Success(ListeningEntry e) => new(true, e, null);
+        public static ParseResult Failure(string m) => new(false, null, m);
     }
 }

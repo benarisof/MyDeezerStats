@@ -1,10 +1,8 @@
-﻿using MongoDB.Driver;
+﻿// Dans Infrastructure/Mongo/Authentification/UserRepository.cs
+using MongoDB.Driver;
 using MyDeezerStats.Domain.Entities;
 using MyDeezerStats.Domain.Repositories;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace MyDeezerStats.Infrastructure.Mongo.Authentification
@@ -24,10 +22,14 @@ namespace MyDeezerStats.Infrastructure.Mongo.Authentification
             return true;
         }
 
-        public async Task<User?> GetByUsername(string username)
+        public async Task<User?> GetByEmailAsync(string email)
         {
-            return await _users.Find(user => user.Email == username).FirstOrDefaultAsync();
+            return await _users.Find(user => user.Email == email).FirstOrDefaultAsync();
         }
 
+        public async Task<User?> GetByIdAsync(string id)
+        {
+            return await _users.Find(user => user.Id.ToString() == id).FirstOrDefaultAsync();
+        }
     }
 }

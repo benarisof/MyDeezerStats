@@ -1,5 +1,14 @@
 export interface AuthResponse {
-  token?: string;
+  token: TokenResponse;  
+}
+
+export interface TokenResponse {
+  success: boolean;
+  token: string;
+  expiresAt: string;
+  userId: string;
+  message: string | null;
+  errors: any[];
 }
 
 export interface SignInResponse {

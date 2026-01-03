@@ -12,6 +12,7 @@ using MyDeezerStats.Domain.Repositories;
 using MyDeezerStats.Infrastructure.Mongo.Authentification;
 using MyDeezerStats.Infrastructure.Mongo.Ecoutes;
 using MyDeezerStats.Infrastructure.Mongo.Search;
+using MyDeezerStats.Infrastructure.Services;
 using MyDeezerStats.Infrastructure.Settings;
 using System.Text.Json.Serialization;
 
@@ -75,6 +76,10 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IListeningService, ListeningService>();
 builder.Services.AddScoped<IExcelService, ExcelService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+//Services techniques
+builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IPasswordService, PasswordService>();
 
 // Repositories
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();

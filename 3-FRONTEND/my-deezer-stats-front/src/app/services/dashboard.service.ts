@@ -9,7 +9,7 @@ import { Album, Artist, Track, Recent, SearchResult } from '../models/dashboard.
 export class DashboardService {
   
   private readonly apiUrl = 'http://localhost:5000/api';
-  last4Weeks: Date = new Date();
+  public last4Weeks: Date = new Date();
 
   constructor(private http: HttpClient) {}
 
@@ -89,22 +89,22 @@ export class DashboardService {
   }
 
   private getDateRange(period: string): { from: Date, to: Date } {
-    const currentDate = new Date();
-    this.last4Weeks = new Date();
+    const currentDate = new Date();    
     const year = currentDate.getFullYear();
     const previousYear = year - 1;
   
     switch (period) {
       case "4weeks":
-        const fourWeeksAgo = this.last4Weeks;
-        fourWeeksAgo.setDate(currentDate.getDate() - 28); 
-        return { from: fourWeeksAgo, to: currentDate };
+        const endDate = new Date(this.last4Weeks); 
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 28); 
+        return { from: startDate, to: endDate };
   
       case "thisYear":
-        return { from: new Date(`${year}-01-01`), to: new Date(`${year}-12-31`) };
+        return { from: new Date(`${year}-01-01`), to: new Date(`${year}-12-31T23:59:59`) };
   
       case "lastYear":
-        return { from: new Date(`${previousYear}-01-01`), to: new Date(`${previousYear}-12-31`) };
+        return { from: new Date(`${previousYear}-01-01`), to: new Date(`${previousYear}-12-31T23:59:59`) };
   
       case "allTime":
         return { from: new Date('2000-01-01'), to: currentDate };  

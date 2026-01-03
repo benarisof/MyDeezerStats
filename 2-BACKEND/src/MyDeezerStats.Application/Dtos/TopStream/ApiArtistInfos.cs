@@ -12,6 +12,7 @@ namespace MyDeezerStats.Application.Dtos.TopStream
         public string Artist { get; set; } = string.Empty;
         public string CoverUrl { get; set; } = string.Empty;
         public int Count { get; set; }
+        public int ListeningTime { get; set; }
     }
 
     public class FullArtistInfos : ApiEntity

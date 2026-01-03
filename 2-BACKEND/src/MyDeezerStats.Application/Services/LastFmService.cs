@@ -34,29 +34,31 @@ namespace MyDeezerStats.Application.Services
 
             while (hasMorePages)
             {
-                var response = await _httpClient.GetAsync(
-                    $"?method=user.getrecenttracks&user={_username}&api_key={_apiKey}" +
-                    $"&format=json&page={page}&limit=200&extended=1");
-
+                // Utilisation de query helpers pour la sécurité
+                var url = $"?method=user.getrecenttracks&user={_username}&api_key={_apiKey}&format=json&page={page}&limit=200&extended=1";
+                var response = await _httpClient.GetAsync(url);
                 response.EnsureSuccessStatusCode();
 
                 var content = await response.Content.ReadAsStringAsync();
                 var historyResponse = JsonSerializer.Deserialize<LastFmHistoryResponse>(content);
 
-                if (historyResponse?.RecentTracks?.Tracks == null || historyResponse.RecentTracks.Tracks.Count == 0)
-                    break;
+                var tracks = historyResponse?.RecentTracks?.Tracks;
+                if (tracks == null || !tracks.Any()) break;
 
-                foreach (var track in historyResponse.RecentTracks.Tracks)
+                foreach (var track in tracks)
                 {
-                    if (track.ListenDate >= sinceDate)
+                    if (track.ListenDate > sinceDate)
                     {
+                        // Utilisation de int.TryParse pour éviter les crashs
+                        int.TryParse(track.Duration, out int durationSec);
+
                         allTracks.Add(new ListeningDto
                         {
-                            Album = track.Album,
-                            Artist = track.Artist,
-                            Track = track.Track,
-                            Date = (DateTime)track.ListenDate,
-                            Duration = track.Duration 
+                            Album = track.Album ?? "Unknown Album",
+                            Artist = track.Artist ?? "Unknown Artist",
+                            Track = track.Track ?? "Unknown Track",
+                            Date = track.ListenDate.Value,
+                            Duration = durationSec
                         });
                     }
                     else
@@ -66,19 +68,13 @@ namespace MyDeezerStats.Application.Services
                     }
                 }
 
-                // Vérifier s'il y a d'autres pages
-                var totalPages = int.TryParse(historyResponse.RecentTracks.Attributes?.TotalPages, out var pages) ? pages : 0;
-                if (page >= totalPages)
-                {
-                    hasMorePages = false;
-                }
-
+                var totalPages = int.TryParse(historyResponse!.RecentTracks.Attributes?.TotalPages, out var p) ? p : 0;
+                if (page >= totalPages) hasMorePages = false;
                 page++;
             }
 
             return allTracks;
         }
     }
-
 }
 

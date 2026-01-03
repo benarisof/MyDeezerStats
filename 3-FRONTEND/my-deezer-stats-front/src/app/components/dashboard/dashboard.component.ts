@@ -39,7 +39,7 @@ export class DashboardComponent implements OnInit {
     { value: 'allTime', label: 'Depuis le début' }
   ];
 
-  selectedPeriod = 'thisYear';
+  selectedPeriod = 'lastYear';
 
   private searchTerms = new Subject<string>();
 

@@ -39,45 +39,60 @@ export class LoginComponent {
   }
 
   login(): void {
-    if (!this.isValidForm()) return;
+  if (!this.isValidForm()) return;
 
-    this.isLoading = true;
-    this.errorMessage = '';
+  this.isLoading = true;
+  this.errorMessage = '';
 
-    this.loginService.login(this.email, this.password).subscribe({
-      next: (response) => {
-        if (!response?.token) {
-          throw new Error('Réponse invalide de l\'API');
-        }
-        
-        // 1. Stockage du token
-        localStorage.setItem('auth_token', response.token);   
-        // 2. Récupération de l'URL de redirection
-        const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/dashboard';
-        
-
-        this.router.navigateByUrl(returnUrl)
-          .then(navSuccess => {
-            if (!navSuccess) {
-              console.error('Échec de la navigation vers', returnUrl);
-              this.router.navigate(['/dashboard']); // Fallback
-            }
-          })
-          .catch(err => {
-            console.error('Erreur de navigation:', err);
-            window.location.href = '/dashboard'; // Fallback ultime
-          });
-      },
-      error: (err) => {
-        this.errorMessage = this.getErrorMessage(err);
-        this.isLoading = false;
-      },
-      complete: () => {
-        this.isLoading = false;
+  this.loginService.login(this.email, this.password).subscribe({
+    next: (response) => {
+      // CORRECTION : Accès au token imbriqué
+      const apiResponse = response.token;  // D'abord récupérer l'objet token
+      
+      if (!apiResponse?.token) {
+        throw new Error('Réponse invalide de l\'API : token manquant');
       }
-    });
-  }
-
+      
+      if (!apiResponse.success) {
+        throw new Error(apiResponse.message || 'Authentification échouée');
+      }
+      
+      // 1. Stockage du token JWT (pas de l'objet complet)
+      localStorage.setItem('auth_token', apiResponse.token);  // ← apiResponse.token, pas response.token
+      
+      // 2. Stocker aussi l'userId pour usage futur
+      if (apiResponse.userId) {
+        localStorage.setItem('user_id', apiResponse.userId);
+      }
+      
+      // 3. Récupération de l'URL de redirection
+      const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/dashboard';
+      
+      // 4. Navigation
+      this.router.navigateByUrl(returnUrl)
+        .then(navSuccess => {
+          if (!navSuccess) {
+            console.error('Échec de la navigation vers', returnUrl);
+            this.router.navigate(['/dashboard']); // Fallback
+          }
+        })
+        .catch(err => {
+          console.error('Erreur de navigation:', err);
+          // Fallback ultime
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 100);
+        });
+    },
+    error: (err) => {
+      this.errorMessage = this.getErrorMessage(err);
+      this.isLoading = false;
+    },
+    complete: () => {
+      this.isLoading = false;
+    }
+  });
+}
   signUp() {
     this.isLoading = true;
     this.errorMessage = '';

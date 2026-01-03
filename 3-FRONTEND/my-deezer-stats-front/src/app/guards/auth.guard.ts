@@ -1,19 +1,14 @@
 import { CanActivateFn, Router } from '@angular/router';
 import { inject } from '@angular/core';
+import { LoginService } from '../services/login.service';  // Import du service
 
 export const authGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
+  const loginService = inject(LoginService);  // Injection du service
   
-  const token = localStorage.getItem('auth_token'); // À harmoniser avec votre login
-  
-  if (token) {
-    // Vérification supplémentaire pour les environnements de production
-    if (isTokenValid(token)) { // Implémentez cette fonction selon votre JWT
-      return true;
-    } else {
-      // Token invalide ou expiré
-      localStorage.removeItem('auth_token');
-    }
+  // Utilisez la méthode du service au lieu de vérifier directement le localStorage
+  if (loginService.isAuthenticated()) {
+    return true;
   }
   
   // Redirection avec préservation de l'URL
@@ -21,14 +16,3 @@ export const authGuard: CanActivateFn = (route, state) => {
     queryParams: { returnUrl: state.url }
   });
 };
-
-// Fonction helper pour la validation du token (exemple basique)
-function isTokenValid(token: string): boolean {
-  try {
-    // Exemple de décodage basique du JWT
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.exp > Date.now() / 1000;
-  } catch {
-    return false;
-  }
-}

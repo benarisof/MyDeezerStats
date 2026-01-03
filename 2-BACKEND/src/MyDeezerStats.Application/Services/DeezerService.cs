@@ -2,11 +2,9 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using System.Net;
 using MyDeezerStats.Domain.Entities.ListeningInfos;
 using MyDeezerStats.Domain.Entities.DeezerApi;
 using MyDeezerStats.Application.Dtos.TopStream;
-
 
 namespace MyDeezerStats.Application.Services
 {
@@ -16,124 +14,87 @@ namespace MyDeezerStats.Application.Services
         private readonly ILogger<DeezerService> _logger;
         private const string DeezerApiBaseUrl = "https://api.deezer.com";
 
+        // Sémaphore pour limiter les appels parallèles (5 requêtes max en même temps)
+        private readonly SemaphoreSlim _apiThrottler = new SemaphoreSlim(5);
+
         public DeezerService(HttpClient httpClient, ILogger<DeezerService> logger)
         {
             _httpClient = httpClient;
             _logger = logger;
         }
-   
+
+        #region Short Infos Enrichment
+
         public async Task<ShortAlbumInfos> EnrichShortAlbumWithDeezerData(AlbumListening album)
         {
-            if (album == null)
-            {
-                _logger.LogWarning("Album cannot be null");
-                throw new ArgumentNullException(nameof(album));
-            }
+            if (album == null) throw new ArgumentNullException(nameof(album));
 
             try
             {
-                // 1. Appel unique à l'API pour récupérer les infos basiques
                 var deezerAlbum = await SearchAlbumOnDeezer(album.Title, album.Artist);
 
-                if (deezerAlbum == null)
-                {
-                    _logger.LogInformation("Album not found on Deezer: {Title}", album.Title);
-                    return new ShortAlbumInfos
-                    {
-                        Title = album.Title,
-                        Artist = album.Artist,
-                        Count = album.StreamCount,
-                    };
-                }
-
-                // 2. On utilise uniquement les données de la recherche (pas d'appel supplémentaire)
                 return new ShortAlbumInfos
                 {
-                    Title = deezerAlbum.Title ?? album.Title,
-                    Artist = deezerAlbum.Artist?.Name ?? album.Artist,
-                    CoverUrl = deezerAlbum.CoverXl ?? deezerAlbum.CoverBig ?? string.Empty,
-                    Count = album.StreamCountByTrack?.Values.Sum() ?? 0,
+                    Title = album.Title,
+                    Artist = deezerAlbum?.Artist.Name ?? album.Artist,
+                    CoverUrl = deezerAlbum?.CoverXl ?? deezerAlbum?.CoverBig ?? string.Empty,
+                    Count = album.StreamCount,
+                    ListeningTime = album.ListeningTime
                 };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error enriching small album {Title}", album.Title);
-                return new ShortAlbumInfos
-                {
-                    Title = album.Title,
-                    Artist = album.Artist,
-                    Count = album.StreamCount
-                };
+                return new ShortAlbumInfos { Title = album.Title, Artist = album.Artist, Count = album.StreamCount };
             }
         }
 
         public async Task<ShortArtistInfos> EnrichShortArtistWithDeezerData(ArtistListening artist)
         {
-            if (artist == null)
-            {
-                _logger.LogWarning("Artist cannot be null");
-                throw new ArgumentNullException(nameof(artist));
-            }
+            if (artist == null) throw new ArgumentNullException(nameof(artist));
 
             try
             {
-                // 1. Appel unique à l'API pour récupérer les infos basiques
                 var deezerArtist = await SearchArtistOnDeezer(artist.Name);
 
-                if (deezerArtist == null)
-                {
-                    _logger.LogInformation("Artist not found on Deezer: {Artist}", artist.Name);
-                    return new ShortArtistInfos
-                    {
-                        Artist = artist.Name,
-                        Count = artist.StreamCount
-                    };
-                }
+                // Si on a trouvé l'artiste, on peut récupérer sa photo directement depuis la recherche
+                // Pas besoin de faire un 2ème appel GetFullArtistDetails juste pour la photo si l'objet de recherche la contient
+                // (Note: DeezerArtist search result contient déjà PictureXl/Big)
 
-                var fullDetails = await GetFullArtistDetails(deezerArtist.Id);
-
-                // 2. On utilise uniquement les données de la recherche (pas d'appel supplémentaire)
                 return new ShortArtistInfos
                 {
-                    Artist = deezerArtist.Name,
-                    CoverUrl = fullDetails?.PictureXl ?? "",
-                    Count = artist.StreamCount
+                    Artist = artist.Name,
+                    CoverUrl = deezerArtist?.PictureXl ?? deezerArtist?.PictureBig ?? string.Empty,
+                    Count = artist.StreamCount,
+                    ListeningTime = artist.ListeningTime
                 };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error enriching small artist {Artist}", artist.Name);
-                return new ShortArtistInfos
-                {
-                    Artist = artist.Name,
-                    Count = artist.StreamCount
-                };
+                return new ShortArtistInfos { Artist = artist.Name, Count = artist.StreamCount };
             }
         }
 
+        #endregion
+
+        #region Full Infos Enrichment
+
         public async Task<FullAlbumInfos> EnrichFullAlbumWithDeezerData(AlbumListening album)
         {
-            if (album == null)
-            {
-                _logger.LogWarning("Album cannot be null");
-                throw new ArgumentNullException(nameof(album));
-            }
+            if (album == null) throw new ArgumentNullException(nameof(album));
 
             try
             {
-                // Recherche de l'album
                 var deezerAlbum = await SearchAlbumOnDeezer(album.Title, album.Artist);
                 if (deezerAlbum == null)
                 {
-                    _logger.LogInformation("Album not found on Deezer: {Title}", album.Title);
                     return CreateBasicFullAlbum(album);
                 }
 
-                // Récupération des détails
                 var fullDetails = await GetFullAlbumDetails(deezerAlbum.Id);
                 if (fullDetails == null)
                 {
-                    _logger.LogWarning("Album details not found for ID: {Id}", deezerAlbum.Id);
                     return CreateBasicFullAlbumWithPartialDeezerData(album, deezerAlbum);
                 }
 
@@ -148,48 +109,76 @@ namespace MyDeezerStats.Application.Services
 
         public async Task<FullArtistInfos> EnrichFullArtistWithDeezerData(ArtistListening artist)
         {
-            if (artist == null)
-            {
-                _logger.LogWarning("Artist cannot be null");
-                throw new ArgumentNullException(nameof(artist));
-            }
+            if (artist == null) throw new ArgumentNullException(nameof(artist));
 
             try
             {
-                // 1. Recherche de l'artiste sur Deezer
                 var deezerArtist = await SearchArtistOnDeezer(artist.Name);
-
                 if (deezerArtist == null)
                 {
-                    _logger.LogInformation("Artist not found on Deezer: {ArtistName}", artist.Name);
                     return CreateBasicFullArtist(artist);
                 }
 
-                // 2. Récupération des détails complets
                 var artistDetails = await GetFullArtistDetails(deezerArtist.Id);
-
                 if (artistDetails == null)
                 {
-                    _logger.LogWarning("Artist details not found for Deezer ID: {ArtistId}", deezerArtist.Id);
                     return CreateBasicFullArtistWithPartialDeezerData(artist, deezerArtist);
                 }
 
-                // 3. Construction du résultat final
-                return MapToFullArtistInfosAsync(artist, artistDetails).Result;
-            }
-            catch (HttpRequestException httpEx)
-            {
-                _logger.LogError(httpEx, "HTTP error while calling Deezer API for artist {ArtistName}", artist.Name);
-                return CreateBasicFullArtist(artist);
+                // Utilisation de await ici, plus de .Result !
+                return await MapToFullArtistInfosAsync(artist, artistDetails);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error enriching artist {ArtistName}", artist.Name);
+                _logger.LogError(ex, "Error enriching artist {ArtistName}", artist.Name);
                 return CreateBasicFullArtist(artist);
             }
         }
-     
 
+        public async Task<ApiTrackInfos> EnrichTrackWithDeezerData(TrackListening track)
+        {
+            if (track == null) throw new ArgumentNullException(nameof(track));
+
+            // Initialisation avec les données Mongo (y compris le temps réel d'écoute)
+            var fullTrack = new ApiTrackInfos
+            {
+                Artist = track.Artist,
+                Track = track.Name,
+                Album = track.Album,
+                Count = track.StreamCount,
+                LastListen = track.LastListening,
+                TotalListening = track.ListeningTime 
+            };
+
+            try
+            {
+                var deezerTrack = await GetTrackFromDeezer(track.Name, track.Artist);
+
+                if (deezerTrack != null)
+                {
+                    fullTrack.Duration = deezerTrack.Duration;
+                    fullTrack.TrackUrl = deezerTrack.CoverUrl; // Attention: DeezerTrack search ne retourne pas toujours l'URL preview, parfois Cover. À vérifier selon ton DTO.
+                    fullTrack.Album = string.IsNullOrEmpty(fullTrack.Album) ? deezerTrack.Album?.Title ?? "" : fullTrack.Album;
+                }
+
+                // Fallback : Si le ListeningTime Mongo est 0 (ex: anciennes données), on le calcule
+                if (fullTrack.TotalListening == 0 && fullTrack.Duration > 0)
+                {
+                    fullTrack.TotalListening = fullTrack.Count * fullTrack.Duration;
+                }
+
+                return fullTrack;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error enriching track {Title}", track.Name);
+                return fullTrack;
+            }
+        }
+
+        #endregion
+
+        #region Private Helpers - Mappers
 
         private FullAlbumInfos CreateBasicFullAlbum(AlbumListening album)
         {
@@ -197,16 +186,75 @@ namespace MyDeezerStats.Application.Services
             {
                 Title = album.Title,
                 Artist = album.Artist,
-                PlayCount = album.StreamCountByTrack.Values.Sum(),
+                PlayCount = album.StreamCount,
+                TotalListening = album.ListeningTime, // Vient de Mongo
                 TrackInfos = album.StreamCountByTrack.Select(t => new ApiTrackInfos
                 {
                     Track = t.Key,
                     Album = album.Title,
                     Artist = album.Artist,
                     Count = t.Value,
-                    TotalListening = t.Value 
-                }).ToList(),
-                CoverUrl = string.Empty
+                    // Ici on ne peut pas deviner le temps par track car le dico n'a que le count
+                    // On laisse 0 ou on estimera plus tard si on avait la durée moyenne
+                }).ToList()
+            };
+        }
+
+        private FullAlbumInfos CreateBasicFullAlbumWithPartialDeezerData(AlbumListening album, DeezerAlbum deezerAlbum)
+        {
+            var result = CreateBasicFullAlbum(album);
+            result.Title = deezerAlbum.Title ?? album.Title;
+            result.CoverUrl = deezerAlbum.CoverXl ?? deezerAlbum.CoverBig ?? string.Empty;
+            return result;
+        }
+
+        private FullAlbumInfos MapToFullAlbumInfos(AlbumListening album, DeezerAlbum deezerAlbum, DeezerAlbumDetails fullDetails)
+        {
+            var trackInfos = new List<ApiTrackInfos>();
+
+            foreach (var deezerTrack in fullDetails.Tracks?.Data ?? Enumerable.Empty<DeezerTrack>())
+            {
+                int localPlayCount = 0;
+                // Essaie de matcher le titre Deezer avec nos clés du dictionnaire (ignorance case)
+                var key = album.StreamCountByTrack.Keys
+                    .FirstOrDefault(k => k.Equals(deezerTrack.Title, StringComparison.OrdinalIgnoreCase));
+
+                if (key != null)
+                {
+                    localPlayCount = album.StreamCountByTrack[key];
+                }
+
+                trackInfos.Add(new ApiTrackInfos
+                {
+                    Track = deezerTrack?.Title ?? "Unknown",
+                    Album = deezerAlbum.Title ?? album.Title,
+                    Artist = deezerTrack?.Artist?.Name ?? deezerAlbum.Artist?.Name ?? album.Artist,
+                    TrackUrl = deezerTrack?.Preview ?? string.Empty,
+                    Count = localPlayCount,
+                    Duration = deezerTrack?.Duration ?? 0,
+                    TotalListening = localPlayCount * (deezerTrack?.Duration ?? 0) // Calcul théorique obligé ici
+                });
+            }
+
+            // On ajoute les tracks de Mongo qui n'auraient pas été trouvés dans l'album Deezer (bonus tracks, fautes de frappe...)
+            foreach (var kvp in album.StreamCountByTrack)
+            {
+                if (!trackInfos.Any(t => t.Track.Equals(kvp.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    trackInfos.Add(new ApiTrackInfos { Track = kvp.Key, Count = kvp.Value, Artist = album.Artist, Album = album.Title });
+                }
+            }
+
+            return new FullAlbumInfos
+            {
+                Title = deezerAlbum.Title ?? album.Title,
+                Artist = deezerAlbum.Artist?.Name ?? album.Artist,
+                PlayCount = album.StreamCount, // Total Streams
+                TotalListening = album.ListeningTime, // Total Time (Réel Mongo)
+                TotalDuration = fullDetails.Duration, // Durée album officiel
+                ReleaseDate = fullDetails.ReleaseDate ?? string.Empty,
+                TrackInfos = trackInfos.OrderByDescending(t => t.Count).ToList(),
+                CoverUrl = deezerAlbum.CoverXl ?? deezerAlbum.CoverBig ?? string.Empty
             };
         }
 
@@ -215,214 +263,250 @@ namespace MyDeezerStats.Application.Services
             return new FullArtistInfos
             {
                 Artist = artist.Name,
-                TotalListening = artist.StreamCount,
+                TotalListening = artist.ListeningTime,
+                PlayCount = artist.StreamCount,
                 TrackInfos = artist.StreamCountByTrack.Select(t => new ApiTrackInfos
                 {
                     Track = t.Key,
-                    Count = t.Value,
-                    TotalListening = t.Value
+                    Count = t.Value
                 }).ToList()
             };
         }
 
-        private FullAlbumInfos MapToFullAlbumInfos(AlbumListening album, DeezerAlbum deezerAlbum, DeezerAlbumDetails fullDetails)
+        private FullArtistInfos CreateBasicFullArtistWithPartialDeezerData(ArtistListening artist, DeezerArtist deezerArtist)
         {
-            // Validation des paramètres
-            ArgumentNullException.ThrowIfNull(album);
-            ArgumentNullException.ThrowIfNull(deezerAlbum);
-            ArgumentNullException.ThrowIfNull(fullDetails);
-
-            var trackInfos = new List<ApiTrackInfos>();
-            int totalListeningTime = 0;
-
-            // Gestion null-safe des tracks
-            foreach (var deezerTrack in fullDetails.Tracks?.Data ?? Enumerable.Empty<DeezerTrack>())
-            {
-                int localPlayCount = 0;
-                album.StreamCountByTrack?.TryGetValue(deezerTrack.Title ?? string.Empty, out localPlayCount);
-                var trackListeningTime = localPlayCount * (deezerTrack?.Duration ?? 0);
-                totalListeningTime += trackListeningTime;
-
-                trackInfos.Add(new ApiTrackInfos
-                {
-                    Track = deezerTrack?.Title ?? "Unknown Track",
-                    Album = deezerAlbum.Title ?? album.Title,
-                    Artist = deezerTrack?.Artist?.Name ?? deezerAlbum.Artist?.Name ?? album.Artist,
-                    TrackUrl = deezerTrack?.Preview ?? string.Empty,
-                    Count = localPlayCount,
-                    Duration = deezerTrack?.Duration ?? 0,
-                    TotalListening = trackListeningTime
-                });
-            }
-
-            return new FullAlbumInfos
-            {
-                Title = deezerAlbum.Title ?? album.Title,
-                Artist = deezerAlbum.Artist?.Name ?? album.Artist,
-                PlayCount = album.StreamCountByTrack?.Values.Sum() ?? 0,
-                TotalDuration = fullDetails.Duration,
-                TotalListening = totalListeningTime,
-                ReleaseDate = fullDetails.ReleaseDate ?? string.Empty,
-                TrackInfos = trackInfos,
-                CoverUrl = deezerAlbum.CoverXl ?? deezerAlbum.CoverBig ?? string.Empty
-            };
+            var result = CreateBasicFullArtist(artist);
+            result.Artist = deezerArtist.Name ?? artist.Name;
+            result.CoverUrl = deezerArtist.PictureBig ?? deezerArtist.Picture ?? string.Empty;
+            result.NbFans = deezerArtist.NbFan;
+            return result;
         }
 
         private async Task<FullArtistInfos> MapToFullArtistInfosAsync(ArtistListening artist, DeezerArtistDetails artistDetails)
         {
-            ArgumentNullException.ThrowIfNull(artist);
-            ArgumentNullException.ThrowIfNull(artistDetails);
+            // Correction critique : Utilisation d'un sémaphore pour ne pas spammer l'API
+            // On limite aussi aux 20 titres les plus écoutés pour la performance (optionnel mais recommandé)
+            var topTracks = artist.StreamCountByTrack
+                .OrderByDescending(kvp => kvp.Value)
+                .Take(50); // On traite les 50 premiers max
 
-            var trackTasks = artist.StreamCountByTrack
-                .OrderByDescending(kvp => kvp.Value) 
-                .Select( kvp => ProcessTrackAsync(kvp.Key, kvp.Value, artistDetails.Name ?? artist.Name)).ToList();
+            var tasks = topTracks.Select(async kvp =>
+            {
+                await _apiThrottler.WaitAsync(); // Attente d'un slot libre
+                try
+                {
+                    return await ProcessTrackAsync(kvp.Key, kvp.Value, artistDetails.Name ?? artist.Name);
+                }
+                finally
+                {
+                    _apiThrottler.Release(); // Libération du slot
+                }
+            });
 
-            var trackInfos = await Task.WhenAll(trackTasks);
+            var enrichedTracks = await Task.WhenAll(tasks);
 
             return new FullArtistInfos
             {
                 Artist = artistDetails.Name ?? artist.Name,
                 PlayCount = artist.StreamCount,
-                TotalListening = trackInfos.Sum(t => t.TotalListening),
+                TotalListening = artist.ListeningTime, // Temps réel Mongo
                 NbFans = artistDetails.NbFan,
-                TrackInfos = trackInfos.ToList(),
+                TrackInfos = enrichedTracks.ToList(),
                 CoverUrl = artistDetails.PictureBig ?? artistDetails.Picture ?? string.Empty
             };
         }
 
         private async Task<ApiTrackInfos> ProcessTrackAsync(string trackName, int playCount, string artistName)
         {
-            var trackDetail = await GetTrackFromDeezer(trackName, artistName);
-            int trackDuration = trackDetail?.Duration ?? 0;
-            int trackListeningTime = playCount * trackDuration;
+            // Note: Ici nous n'avons pas le ListeningTime individuel venant de l'objet ArtistListening (juste le count).
+            // Donc le TotalListening sera estimé.
+
+            var deezerTrack = await GetTrackFromDeezer(trackName, artistName);
+            int trackDuration = deezerTrack?.Duration ?? 0;
+            int estimatedTime = playCount * trackDuration;
 
             return new ApiTrackInfos
             {
                 Track = trackName,
                 Artist = artistName,
                 Count = playCount,
-                TrackUrl = trackDetail?.CoverUrl ?? string.Empty,
+                TrackUrl = deezerTrack?.CoverUrl ?? string.Empty, // Ou Preview selon ta prop
                 Duration = trackDuration,
-                TotalListening = trackListeningTime,
-                Album = trackDetail?.Album?.Title ?? string.Empty
+                TotalListening = estimatedTime,
+                Album = deezerTrack?.Album?.Title ?? string.Empty
             };
         }
 
-        private FullAlbumInfos CreateBasicFullAlbumWithPartialDeezerData(AlbumListening album, DeezerAlbum deezerAlbum)
-        {
-            return new FullAlbumInfos
-            {
-                Title = deezerAlbum.Title ?? album.Title,
-                Artist = deezerAlbum.Artist?.Name ?? album.Artist,
-                PlayCount = album.StreamCountByTrack?.Values.Sum() ?? 0,
-                CoverUrl = deezerAlbum.CoverXl ?? deezerAlbum.CoverBig ?? string.Empty,
-                TrackInfos = album.StreamCountByTrack?
-                    .Select(t => new ApiTrackInfos
-                    {
-                        Track = t.Key,
-                        Album = deezerAlbum.Title ?? album.Title,
-                        Artist = deezerAlbum.Artist?.Name ?? album.Artist,
-                        Count = t.Value
-                    }).ToList() ?? new List<ApiTrackInfos>()
-            };
-        }
+        #endregion
 
-        private FullArtistInfos CreateBasicFullArtistWithPartialDeezerData(ArtistListening artist, DeezerArtist deezerArtist)
-        {
-            return new FullArtistInfos
-            {
-                Artist = deezerArtist.Name ?? artist.Name,
-                CoverUrl = deezerArtist.PictureBig ?? deezerArtist.Picture ?? string.Empty,
-                PlayCount = artist.StreamCount,
-                TotalListening = artist.StreamCount,
-                NbFans = deezerArtist.NbFan,
-                TrackInfos = artist.StreamCountByTrack?.Select(t => new ApiTrackInfos
-                {
-                    Track = t.Key,
-                    Artist = deezerArtist.Name ?? artist.Name,
-                    Count = t.Value,
-                    TotalListening = t.Value
-                }).ToList() ?? new List<ApiTrackInfos>()
-            };
-        }
+        #region Private Helpers - API Calls
 
         private async Task<DeezerAlbum?> SearchAlbumOnDeezer(string title, string artist)
         {
             try
             {
-                var response = await _httpClient.GetAsync(
-                    $"{DeezerApiBaseUrl}/search/album?q=artist:\"{Uri.EscapeDataString(artist)}\" album:\"{Uri.EscapeDataString(title)}\"&limit=10");
+                var query = $"artist:\"{Uri.EscapeDataString(artist)}\" album:\"{Uri.EscapeDataString(title)}\"";
+                var response = await _httpClient.GetFromJsonAsync<DeezerSearchResponse<DeezerAlbum>>(
+                    $"{DeezerApiBaseUrl}/search/album?q={query}&limit=5");
 
-                response.EnsureSuccessStatusCode();
-
-                var content = await response.Content.ReadFromJsonAsync<DeezerSearchResponse<DeezerAlbum>>();
-
-                // Filtrage manuel pour une correspondance exacte du titre
-                return content?.Data?
-                    .FirstOrDefault(album =>
-                        album.Title?.Equals(title, StringComparison.OrdinalIgnoreCase) == true);
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError(ex, "Error searching album {title} on Deezer", title);
-                // Retourner null ou une valeur par défaut, ou relancer une exception personnalisée
-                return null;
+                foreach(var album in response!.Data)
+                {
+                    if (album.Title == title)
+                    {
+                        if (artist.Contains(album.Artist.Name)){
+                            return album;
+                        }
+                    }
+                }
+                return response?.Data?.FirstOrDefault();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error searching album {Title} by {Artist} on Deezer", title, artist);
+                _logger.LogWarning(ex, "Deezer search failed for album {Title}", title);
                 return null;
             }
         }
-
-
-
 
         private async Task<DeezerArtist?> SearchArtistOnDeezer(string artistName)
         {
+            var url = $"{DeezerApiBaseUrl}/search/artist?q={Uri.EscapeDataString(artistName)}&limit=1";
+
+            _logger.LogDebug("Deezer API search started for artist '{Artist}' | URL: {Url}", artistName, url);
+
             try
             {
-                var response = await _httpClient.GetAsync(
-                    $"{DeezerApiBaseUrl}/search/artist?q={Uri.EscapeDataString(artistName)}&limit=1");
+                using var response = await _httpClient.GetAsync(url);
 
-                response.EnsureSuccessStatusCode();
+                _logger.LogDebug(
+                    "Deezer API response received for artist '{Artist}' | StatusCode: {StatusCode}",
+                    artistName,
+                    response.StatusCode
+                );
 
-                var content = await response.Content.ReadFromJsonAsync<DeezerSearchResponse<DeezerArtist>>();
-                return content?.Data?.FirstOrDefault();
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync();
+
+                    _logger.LogWarning(
+                        "Deezer API returned non-success status for artist '{Artist}' | StatusCode: {StatusCode} | Body: {Body}",
+                        artistName,
+                        response.StatusCode,
+                        errorBody
+                    );
+
+                    return null;
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    _logger.LogWarning(
+                        "Deezer API returned empty body for artist '{Artist}'",
+                        artistName
+                    );
+                    return null;
+                }
+
+                DeezerSearchResponse<DeezerArtist>? data;
+
+                try
+                {
+                    data = JsonSerializer.Deserialize<DeezerSearchResponse<DeezerArtist>>(
+                        json,
+                        new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        }
+                    );
+                }
+                catch (JsonException jex)
+                {
+                    _logger.LogError(
+                        jex,
+                        "Failed to deserialize Deezer API response for artist '{Artist}' | Raw JSON: {Json}",
+                        artistName,
+                        json
+                    );
+                    return null;
+                }
+
+                var artist = data?.Data?.FirstOrDefault();
+
+                if (artist == null)
+                {
+                    _logger.LogInformation(
+                        "Deezer API returned no artist result for '{Artist}'",
+                        artistName
+                    );
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Deezer artist found | Search='{Search}' | DeezerId={Id} | Name='{Name}'",
+                        artistName,
+                        artist.Id,
+                        artist.Name
+                    );
+                }
+
+                return artist;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Deezer API call timed out for artist '{Artist}'",
+                    artistName
+                );
+                return null;
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Error searching artist {ArtistName} on Deezer", artistName);
-                // Retourner null ou une valeur par défaut, ou relancer une exception personnalisée
+                _logger.LogError(
+                    ex,
+                    "HTTP error while calling Deezer API for artist '{Artist}'",
+                    artistName
+                );
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error searching artist {ArtistName} on Deezer", artistName);
+                _logger.LogError(
+                    ex,
+                    "Unexpected error while searching Deezer artist '{Artist}'",
+                    artistName
+                );
                 return null;
             }
         }
 
+
+        //private async Task<DeezerArtist?> SearchArtistOnDeezer(string artistName)
+        //{
+        //    try
+        //    {
+        //        var response = await _httpClient.GetFromJsonAsync<DeezerSearchResponse<DeezerArtist>>(
+        //            $"{DeezerApiBaseUrl}/search/artist?q={Uri.EscapeDataString(artistName)}&limit=1");
+        //        return response?.Data?.FirstOrDefault();
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogWarning(ex, "Deezer search failed for artist {Artist}", artistName);
+        //        return null;
+        //    }
+        //}
 
         private async Task<DeezerAlbumDetails?> GetFullAlbumDetails(int albumId)
         {
             try
             {
-                var response = await _httpClient.GetAsync($"{DeezerApiBaseUrl}/album/{albumId}");
-                response.EnsureSuccessStatusCode();
-
-                // Debug: affichez la réponse brute
-                var rawResponse = await response.Content.ReadAsStringAsync();
-                _logger.LogDebug("Deezer API Response: {Response}", rawResponse);
-
-                return JsonSerializer.Deserialize<DeezerAlbumDetails>(rawResponse, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                return await _httpClient.GetFromJsonAsync<DeezerAlbumDetails>(
+                    $"{DeezerApiBaseUrl}/album/{albumId}");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting details for album ID {AlbumId}", albumId);
+                _logger.LogWarning("Failed to get album details {Id}: {Message}", albumId, ex.Message);
                 return null;
             }
         }
@@ -431,112 +515,50 @@ namespace MyDeezerStats.Application.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync($"{DeezerApiBaseUrl}/artist/{artistId}");
-                response.EnsureSuccessStatusCode();
-
-                // Debug: affichez la réponse brute
-                var rawResponse = await response.Content.ReadAsStringAsync();
-                _logger.LogDebug("Deezer API Response: {Response}", rawResponse);
-
-                return JsonSerializer.Deserialize<DeezerArtistDetails>(rawResponse, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                return await _httpClient.GetFromJsonAsync<DeezerArtistDetails>(
+                    $"{DeezerApiBaseUrl}/artist/{artistId}");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting details for artist ID {ArtistId}", artistId);
+                _logger.LogWarning("Failed to get artist details {Id}: {Message}", artistId, ex.Message);
                 return null;
             }
         }
 
         public async Task<DeezerTrack?> GetTrackFromDeezer(string trackName, string artistName)
         {
-            if (string.IsNullOrWhiteSpace(trackName))
-            {
-                _logger.LogWarning("Track name cannot be null or empty");
-                return null;
-            }
+            if (string.IsNullOrWhiteSpace(trackName)) return null;
 
             try
             {
-                // Construction et appel API
-                var encodedTrack = WebUtility.UrlEncode(trackName);
-                var encodedArtist = WebUtility.UrlEncode(artistName);
-                var url = $"{DeezerApiBaseUrl}/search?q=artist:\"{encodedArtist}\" track:\"{encodedTrack}\"&limit=1";
+                var query = $"artist:\"{Uri.EscapeDataString(artistName)}\" track:\"{Uri.EscapeDataString(trackName)}\"";
 
-                using var response = await _httpClient.GetAsync(url);
-                if (!response.IsSuccessStatusCode) return null;
+                // Utilisation de GetFromJsonAsync au lieu de parsing manuel JsonDocument
+                var response = await _httpClient.GetFromJsonAsync<DeezerSearchResponse<DeezerTrack>>(
+                    $"{DeezerApiBaseUrl}/search?q={query}&limit=1");
 
-                // Désérialisation
-                using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
-                if (!doc.RootElement.TryGetProperty("data", out var data) || data.GetArrayLength() == 0)
-                    return null;
+                var track = response?.Data?.FirstOrDefault();
 
-                var firstResult = data[0];
-
-                // Mapping direct sans méthodes helpers
-                return new DeezerTrack
+                if (track != null)
                 {
-                    Title = firstResult.TryGetProperty("title", out var title)
-                           ? title.GetString() ?? trackName
-                           : trackName,
-
-                    Duration = firstResult.TryGetProperty("duration", out var duration)
-                              ? duration.GetInt32()
-                              : 0,
-
-                    CoverUrl = firstResult.TryGetProperty("album", out var album)
-                             && album.TryGetProperty("cover_big", out var cover)
-                              ? cover.GetString() ?? string.Empty
-                              : string.Empty,
-                    Album = new DeezerAlbum {Title = firstResult.TryGetProperty("album", out var albumElement)
-                            ? albumElement.GetProperty("title").GetString() ?? string.Empty
-                            : string.Empty}
-                };
-            }
-            catch
-            {
-                return null; 
-            }
-        }
-
-        public async Task<ApiTrackInfos> EnrichTrackWithDeezerData(TrackListening track)
-        {
-            if (track == null)
-            {
-                _logger.LogWarning("Album cannot be null");
-                throw new ArgumentNullException(nameof(track));
-            }
-
-            var fullTrack = new ApiTrackInfos
-            {
-                Artist = track.Artist,
-                Track = track.Name,
-                Album = track.Album,
-                Count = track.StreamCount,
-                LastListen = track.LastListening
-            };
-
-            try
-            {
-                var deezerTrack = await GetTrackFromDeezer(track.Name, track.Artist);
-                if (deezerTrack == null)
-                {
-                    _logger.LogInformation("Track not found on Deezer: {Title}", track.Name);
-                    return fullTrack;
+                    // Petit hack : Si l'objet DeezerTrack ne mappe pas directement l'image dans une propriété simple,
+                    // assure-toi que ta classe DeezerTrack a bien les propriétés imbriquées mappées ou gère-le ici.
+                    // Supposons que DeezerTrack a une prop 'Album' qui contient 'CoverBig'.
+                    if (string.IsNullOrEmpty(track.CoverUrl) && track.Album != null)
+                    {
+                        track.CoverUrl = track.Album.CoverBig ?? track.Album.CoverXl ?? "";
+                    }
                 }
-                fullTrack.Duration = deezerTrack.Duration;
-                fullTrack.TrackUrl = deezerTrack.CoverUrl;
-                fullTrack.TotalListening = track.StreamCount * fullTrack.Duration;
-                return fullTrack;
-               
+
+                return track;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error enriching track {Title}", track.Name);
-                return fullTrack;
+                _logger.LogWarning("Failed to search track {Track}: {Message}", trackName, ex.Message);
+                return null;
             }
         }
+
+        #endregion
     }
 }

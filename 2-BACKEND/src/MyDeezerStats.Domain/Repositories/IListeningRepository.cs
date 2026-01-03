@@ -22,6 +22,6 @@ namespace MyDeezerStats.Domain.Repositories
         Task<List<ListeningEntry>> GetLatestListeningsAsync(int limit);
 
         Task InsertListeningsAsync(List<ListeningEntry> listenings);
-        
+        Task<ListeningEntry?> GetLastEntryAsync();
     }
 }

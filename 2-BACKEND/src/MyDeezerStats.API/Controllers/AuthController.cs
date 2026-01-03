@@ -32,7 +32,7 @@ namespace MyDeezerStats.API.Controllers
             {
                 _logger.LogInformation("Signup attempt for {Email}", request.Email);
 
-                var createUserResult = await _authService.CreateUser(request.Email, request.Password);
+                var createUserResult = await _authService.RegisterAsync(request.Email, request.Password);
 
                 _logger.LogInformation("Signup successful for {Email}", request.Email);
 
@@ -57,9 +57,9 @@ namespace MyDeezerStats.API.Controllers
             {
                 _logger.LogInformation($"Login attempt for {request.Email}");
 
-                var token = await _authService.Authenticate(request.Email, request.Password);
+                var token = await _authService.AuthenticateAsync(request.Email, request.Password);
 
-                if (string.IsNullOrEmpty(token))
+                if (!token.Success)
                 {
                     _logger.LogWarning($"Login failed for {request.Email}");
                     return Unauthorized(new { message = "Email ou mot de passe incorrect" });

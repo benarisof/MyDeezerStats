@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MyDeezerStats.Application.Services;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,7 +9,10 @@ namespace MyDeezerStats.Application.Interfaces
 {
     public interface IAuthService
     {
-        Task<string> Authenticate(string username, string password);
-        Task<bool> CreateUser(string email, string password);
+        Task<AuthResult> AuthenticateAsync(string email, string password);
+        Task<AuthResult> RegisterAsync(string email, string password);
+        Task<AuthResult> RefreshTokenAsync(string token);
+        Task<bool> ValidateUserExistsAsync(string email);
     }
+
 }

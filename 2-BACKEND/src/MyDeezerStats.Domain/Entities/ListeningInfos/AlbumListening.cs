@@ -11,6 +11,7 @@ namespace MyDeezerStats.Domain.Entities.ListeningInfos
         public string Title { get; set; } = string.Empty;
         public string Artist { get; set; } = string.Empty;
         public int StreamCount { get; set; }
+        public int ListeningTime { get; set; }
         public Dictionary<string, int> StreamCountByTrack { get; set; } = [];
     }
 }
