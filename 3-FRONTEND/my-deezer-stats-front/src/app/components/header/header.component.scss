@@ -1,0 +1,167 @@
+// Variables Deezer
+$deezer-purple: #a238ff;
+$deezer-pink: #ff3366;
+$deezer-gradient: linear-gradient(135deg, #a238ff, #ff3366);
+$bg-header: #121216; // Le gris anthracite typique de Deezer
+$bg-input: #191922;
+$text-main: #ffffff;
+$text-secondary: #a2a2ad;
+
+.main-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2.5rem;
+  background-color: $bg-header;
+  border-bottom: 1px solid #23232d;
+  font-family: 'Deezer', 'Inter', sans-serif;
+
+  // --- Navigation (Style épuré Deezer) ---
+  .nav-tabs {
+    display: flex;
+    gap: 2rem;
+
+    a {
+      text-decoration: none;
+      color: $text-main;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+      opacity: 0.6;
+      transition: opacity 0.2s ease;
+
+      &:hover {
+        opacity: 1;
+      }
+
+      &.active {
+        opacity: 1;
+        position: relative;
+        
+        // Petit point ou ligne sous l'élément actif façon Deezer
+        &::after {
+          content: "";
+          position: absolute;
+          bottom: -8px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 4px;
+          height: 4px;
+          background-color: $deezer-purple;
+          border-radius: 50%;
+        }
+      }
+    }
+  }
+
+  // --- Contrôles (Boutons arrondis et Pill-shape) ---
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+
+    // Barre de recherche façon "Search Pill"
+    .search-container {
+      position: relative;
+      
+      input {
+        background: $bg-input;
+        border: 1px solid #32323d;
+        padding: 0.6rem 1.2rem;
+        border-radius: 40px;
+        color: white;
+        width: 300px;
+        font-size: 0.9rem;
+        transition: border-color 0.2s;
+
+        &:focus {
+          outline: none;
+          border-color: $deezer-purple;
+        }
+      }
+    }
+
+    // Sélecteur de période
+    .period-select {
+      background: transparent;
+      color: $text-secondary;
+      border: 1px solid #32323d;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      
+      &:hover {
+        border-color: $text-secondary;
+      }
+    }
+
+    // Bouton Import (Le fameux dégradé Deezer)
+    .upload-btn {
+      background: $deezer-gradient;
+      color: white;
+      padding: 0.6rem 1.4rem;
+      border-radius: 40px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+      &:hover {
+        transform: scale(1.03);
+        box-shadow: 0 4px 15px rgba(162, 56, 255, 0.4);
+      }
+    }
+
+    // Déconnexion
+    .logout-btn {
+      background: none;
+      border: none;
+      color: $text-secondary;
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      
+      &:hover {
+        color: white;
+        text-decoration: underline;
+      }
+    }
+  }
+}
+
+// Résultats de recherche adaptés
+.search-results {
+  position: absolute;
+  top: 120%;
+  left: 0;
+  width: 100%;
+  background: #23232d;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  z-index: 10;
+
+  li {
+    padding: 0.8rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid #2d2d37;
+    cursor: pointer;
+
+    &:hover {
+      background: #2d2d37;
+    }
+
+    .type-badge {
+      background: $deezer-gradient;
+      font-size: 0.65rem;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+  }
+}

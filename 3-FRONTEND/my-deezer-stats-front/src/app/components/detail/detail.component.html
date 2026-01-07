@@ -1,87 +1,74 @@
-<div class="loading-container" *ngIf="loading">
-  <div class="loading-spinner">
-    <i class="fas fa-spinner fa-spin"></i>
-    <span>Chargement en cours...</span>
+<div class="detail-container" [class.loading]="loading">
+  
+  <div class="loading-overlay" *ngIf="loading">
+    <div class="spinner"></div>
   </div>
-</div>
-<div class="detail-container" *ngIf="item">
-    <!-- Bouton retour -->
+
+  <div *ngIf="item && !loading" class="animate-in">
     <button class="back-button" (click)="goToDashboard()">
-      <i class="fas fa-arrow-left"></i> Retour au dashboard
+      <i class="fas fa-chevron-left"></i>
+      <span>Retour au dashboard</span>
     </button>
-    
-    <!-- Header section -->
-    <div class="detail-header">
-      <img [src]="item.coverUrl || 'assets/default-cover.png'" 
-           alt="{{item.type === 'album' ? item.title : item.artist}}"
-           class="cover-image">
+
+    <header class="hero-section">
+      <div class="cover-wrapper">
+        <img [src]="item.coverUrl || 'assets/default-cover.jpg'" 
+             [alt]="item.type === 'album' ? item.title : item.artist"
+             class="hero-cover">
+      </div>
       
-      <div class="header-info">
-        <h1>{{item.type === 'album' ? item.title : item.artist}}</h1>
+      <div class="hero-content">
+        <span class="badge">{{ item.type === 'album' ? 'ALBUM' : 'ARTISTE' }}</span>
+        <h1>{{ item.type === 'album' ? item.title : item.artist }}</h1>
         
-        <!-- Album specific info -->
-        <div *ngIf="item.type === 'album'" class="album-info">
-          <p class="artist-name">{{item.artist}}</p>
-          <p *ngIf="item.releaseDate" class="release-date">
-            Sorti le {{item.releaseDate | date:'dd/MM/yyyy'}}
-          </p>
-          <div class="stats">
+        <div class="hero-meta">
+          <p class="main-artist" *ngIf="item.type === 'album'">{{ item.artist }}</p>
+          <div class="stats-row">
             <span *ngIf="item.playCount">
-              <i class="fas fa-play"></i> {{item.playCount}} écoutes
+              <i class="fas fa-play"></i> {{ item.playCount | number }} écoutes
             </span>
-            <span *ngIf="item.totalDuration">
-              <i class="fas fa-clock"></i> {{item.totalDuration | duration}}
+            <span *ngIf="item.type === 'artist' && item.nbFans">
+              <i class="fas fa-heart"></i> {{ item.nbFans | number }} fans
             </span>
-            <span><i class="fas fa-hourglass"></i> Temps total d'écoute : {{item.totalListening | duration}}</span>
-          </div>
-          </div>
-          <!-- Album additional info moved here -->
-         
-        
-        <!-- Artist specific info -->
-        <div *ngIf="item.type === 'artist'" class="artist-info">
-          <div class="stats">
-            <span *ngIf="item.playCount">
-              <i class="fas fa-play"></i> {{item.playCount}} écoutes
+            <span *ngIf="item.type === 'album' && item.releaseDate">
+              <i class="fas fa-calendar-alt"></i> {{ item.releaseDate | date:'yyyy' }}
             </span>
-            <span *ngIf="item.nbFans">
-              <i class="fas fa-users"></i> {{item.nbFans | number}} fans
+            <span>
+              <i class="fas fa-hourglass-half"></i> {{ item.totalListening | duration }} cumulés
             </span>
-          </div>
-          <!-- Artist additional info moved here -->
-          <div class="additional-artist-stats">
-            <span><i class="fas fa-hourglass"></i> Temps total d'écoute : {{item.totalListening | duration}}</span>
           </div>
         </div>
       </div>
-    </div>
-  
-    <!-- Tracks section -->
-    <div class="tracks-section">
-        <h2>Titres</h2>
-        <div class="tracks-list">
-          <div *ngFor="let track of item.trackInfos; let i = index" class="track-item">
-            <div class="track-number">{{i + 1}}</div>
-            <div class="track-info">
-              <div class="track-title">{{track.track}}</div>
-              <div *ngIf="item.type === 'album'" class="track-artist">
-                {{track.artist}}
-              </div>
-              <div *ngIf="item.type === 'artist'" class="track-album">
-                {{track.album}}
-              </div>
-            </div>
-            <div class="track-stats">
-              <span class="play-count">
-                <strong>Nombre d'écoutes :</strong> 
-                <i class="fas fa-play"></i> {{track.count | number}}
-              </span>
-              <span class="duration">
-                <strong>Durée du morceau :</strong> 
-                {{track.duration | duration}}
-              </span>
-            </div>
-          </div>
+    </header>
+
+    <section class="tracks-section">
+      <div class="section-header">
+        <h2><i class="fas fa-list-ul"></i> Titres populaires</h2>
+      </div>
+
+      <div class="tracks-table">
+        <div class="table-header">
+          <div class="col-rank">#</div>
+          <div class="col-title">TITRE</div>
+          <div class="col-meta">{{ item.type === 'album' ? 'ARTISTE' : 'ALBUM' }}</div>
+          <div class="col-stats">ÉCOUTES</div>
+          <div class="col-duration"><i class="far fa-clock"></i></div>
         </div>
-    </div>
+
+        <div class="track-row" *ngFor="let track of item.trackInfos; let i = index">
+          <div class="col-rank">{{ i + 1 }}</div>
+          <div class="col-title">
+            <span class="track-name">{{ track.track }}</span>
+          </div>
+          <div class="col-meta">
+             {{ item.type === 'album' ? track.artist : track.album }}
+          </div>
+          <div class="col-stats">
+            <span class="count-badge">{{ track.count }}</span>
+          </div>
+          <div class="col-duration">{{ track.duration | duration }}</div>
+        </div>
+      </div>
+    </section>
+  </div>
 </div>

@@ -57,10 +57,6 @@ namespace MyDeezerStats.Application.Services
             {
                 var deezerArtist = await SearchArtistOnDeezer(artist.Name);
 
-                // Si on a trouvé l'artiste, on peut récupérer sa photo directement depuis la recherche
-                // Pas besoin de faire un 2ème appel GetFullArtistDetails juste pour la photo si l'objet de recherche la contient
-                // (Note: DeezerArtist search result contient déjà PictureXl/Big)
-
                 return new ShortArtistInfos
                 {
                     Artist = artist.Name,

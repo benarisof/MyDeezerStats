@@ -1,7 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import { catchError, map, Observable, throwError } from 'rxjs';
+import { BehaviorSubject, catchError, map, Observable, throwError } from 'rxjs';
 import { Album, Artist, Track, Recent, SearchResult } from '../models/dashboard.models';
+
+
+export const DEFAULT_PERIOD = 'thisYear'; 
 
 @Injectable({
   providedIn: 'root'
@@ -143,5 +146,16 @@ export class DashboardService {
         return throwError(() => error);
       })
     );
+  }
+
+    // 1. On crée un BehaviorSubject pour stocker l'état de la période
+  private periodSubject = new BehaviorSubject<string>(DEFAULT_PERIOD);
+  
+  // 2. On expose l'observable pour que le Dashboard puisse s'y abonner
+  period$ = this.periodSubject.asObservable();
+
+  // 3. Méthode pour changer la période (appelée par le Header)
+  updatePeriod(period: string) {
+    this.periodSubject.next(period);
   }
 }

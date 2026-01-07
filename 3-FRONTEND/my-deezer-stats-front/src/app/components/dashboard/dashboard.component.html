@@ -1,125 +1,83 @@
 <div class="dashboard-container" [class.loading]="isLoading">
 
-    <div class="loading-overlay" *ngIf="isLoading">
-        <div class="spinner"></div>
-      </div>
-    <!-- Conteneur des outils (sélecteur, recherche, import) -->
-    <div class="tools-container">
-        <div class="se-deconnecter">
-            <button class="back-button" (click)="logout()">
-                <i class="fas fa-sign-out-alt"></i> Se déconnecter
-            </button>
-        </div>
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="spinner"></div>
+  </div>
 
-        <!-- Sélecteur de période -->
-        <div class="period-selector-container">
-            <select class="period-selector" 
-                    [(ngModel)]="selectedPeriod" 
-                    (change)="onPeriodChange()">
-              <option *ngFor="let period of periods" 
-                      [value]="period.value">
-                {{ period.label }}
-              </option>
-            </select>
-        </div>
-        
-        <!-- Barre de recherche -->
-        <div class="search-container">
-            <input 
-              type="text" 
-              [(ngModel)]="searchQuery" 
-              (input)="onSearchInput()" 
-              placeholder="Rechercher..." 
-              (focus)="showSearchResults = true" 
-              (blur)="hideSearchResults()" 
-            />
-          
-            <ul class="search-results" *ngIf="showSearchResults && filteredResults.length > 0">
-              <li 
-                *ngFor="let result of filteredResults" 
-                (mousedown)="onSelectResult(result)"
-              >
-                {{ formatResult(result) }}
-              </li>
-            </ul>
+  <section class="section">
+    <h2>
+      <span class="clickable" (click)="goToTop('album')">
+        <i class="fa fa-compact-disc"></i> Top albums
+      </span>
+    </h2>
+    <div class="card-list">
+      <div *ngFor="let album of topAlbums; let i = index" class="card-wrapper">
+        <div class="card" (click)="navigateToDetail('album', album)"
+          [title]="album.title + (album.artist ? ' - ' + album.artist : '')">
+          <div class="rank">{{ i + 1 }}</div>
+          <img [src]="album.coverUrl || 'assets/default-cover.jpg'" alt="{{ album.title }}" class="card-image" />
+          <div class="card-content">
+            <h3>{{ album.title }}</h3>
+            <p>{{ album.artist }}</p>
+            <p>{{ album.count }} écoutes</p>
           </div>
-
-        
-        <!-- Import Excel -->
-        <div class="import-container">
-            <label for="file-upload" class="import-button">
-                <i class="fas fa-file-excel"></i> Importer données Deezer
-            </label>
-            <input id="file-upload" type="file" accept=".xlsx, .xls" (change)="onFileSelected($event)" style="display: none;">
         </div>
+      </div>
     </div>
-   
-    <!-- Top 20 Albums -->
-    <section class="section">
-        <h2 class="clickable" (click)="goToTop('album')">
-            <i class="fas fa-compact-disc"></i> Top albums
-        </h2>
-        <div class="card-list">
-            <div *ngFor="let album of topAlbums; let i = index" class="card" (click)="navigateToDetail('album', album)"
-                 [title]="album.title + (album.artist ? ' - ' + album.artist : '')">
-                <div class="rank">{{ i + 1 }}</div>
-                <img [src]="album.coverUrl || 'assets/default-cover.jpg'" alt="{{ album.title }}" class="card-image" />
-                <div class="card-content">
-                    <h3>{{ album.title }}</h3>
-                    <p>{{ album.artist }}</p>
-                    <p>{{ album.count }} écoutes</p>
-                </div>
-            </div>
+  </section>
+
+  <section class="section">
+    <h2>
+      <span class="clickable" (click)="goToTop('artist')">
+        <i class="fas fa-user"></i> Top artistes
+      </span>
+    </h2>
+    <div class="card-list">
+      <div *ngFor="let artist of topArtists; let i = index" class="card-wrapper">
+        <div class="card" (click)="navigateToDetail('artist', artist)"
+          [title]="artist.artist">
+          <div class="rank">{{ i + 1 }}</div>
+          <img [src]="artist.coverUrl || 'assets/default-cover.jpg'" alt="{{ artist.artist }}" class="card-image" />
+          <div class="card-content">
+            <h3>{{ artist.artist }}</h3>
+            <p>{{artist.count}} écoutes</p>
+          </div>
         </div>
-    </section>
-  
-    <!-- Top 20 Artistes -->
-    <section class="section">
-        <h2 class="clickable" (click)="goToTop('artist')">
-            <i class="fas fa-user"></i> Top artistes
-        </h2>
-        <div class="card-list">
-            <div *ngFor="let artist of topArtists; let i = index" class="card"  (click)="navigateToDetail('artist', artist)"
-                 [title]="artist.artist">
-                <div class="rank">{{ i + 1 }}</div>
-                <img [src]="artist.coverUrl || 'assets/default-cover.jpg'" alt="{{ artist.artist }}" class="card-image" />
-                <div class="card-content">
-                    <h3>{{ artist.artist }}</h3>
-                    <p>{{artist.count}} écoutes</p> 
-                </div>
-            </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>
+      <span class="clickable" (click)="goToTop('track')">
+        <i class="fas fa-music"></i> Top morceaux
+      </span>
+    </h2>
+    <div class="card-list">
+      <div *ngFor="let song of topTracks; let i = index" class="card-wrapper">
+        <div class="card"
+          [title]="song.track + ' - ' + song.artist + (song.album ? ' (' + song.album + ')' : '')">
+          <div class="rank">{{ i + 1 }}</div>
+          <img [src]="song.trackUrl || 'assets/default-cover.jpg'" alt="{{ song.track }}" class="card-image" />
+          <div class="card-content">
+            <h3>{{ song.track }}</h3>
+            <p>{{ song.artist }}</p>
+            <p>{{ song.album }}</p>
+            <p>{{song.count}} écoutes</p>
+          </div>
         </div>
-    </section>
-  
-    <!-- Top 20 Morceaux -->
-    <section class="section">
-        <h2 class="clickable" (click)="goToTop('track')">
-            <i class="fas fa-user"></i> Top morceaux
-        </h2>
-        <div class="card-list">
-            <div *ngFor="let song of topTracks; let i = index" class="card" 
-                 [title]="song.track + ' - ' + song.artist + (song.album ? ' (' + song.album + ')' : '')">
-                <div class="rank">{{ i + 1 }}</div>
-                <img [src]="song.trackUrl || 'assets/default-cover.jpg'" alt="{{ song.track }}" class="card-image" />
-                <div class="card-content">
-                    <h3>{{ song.track }}</h3>
-                    <p>{{ song.artist }}</p>
-                    <p>{{ song.album }}</p>
-                    <p>{{song.count}} écoutes</p>
-                </div>
-            </div>
-        </div>
-    </section>
-  
-    <!-- Dernières écoutes -->
-    <section class="section">
-        <h2><i class="fas fa-history"></i> Dernières écoutes</h2>
-        <div class="last-listened">
-            <div *ngFor="let song of recentListens" class="last-item">
-                <p><strong>{{ song.track }}</strong> - {{ song.artist }}</p>
-                <span class="listened-date">{{ song.date | date:'short' }}</span>
-            </div>
-        </div>
-    </section>
-  
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2><i class="fas fa-history"></i> Dernières écoutes</h2>
+    <div class="last-listened">
+      <div *ngFor="let song of recentListens" class="last-item">
+        <p><strong>{{ song.track }}</strong> - {{ song.artist }}</p>
+        <span class="listened-date">{{ song.date | date:'short' }}</span>
+      </div>
+    </div>
+  </section>
+
 </div>

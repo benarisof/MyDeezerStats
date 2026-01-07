@@ -33,10 +33,15 @@ namespace MyDeezerStats.API.Controllers
                 _logger.LogInformation("Signup attempt for {Email}", request.Email);
 
                 var createUserResult = await _authService.RegisterAsync(request.Email, request.Password);
+                if (createUserResult.Success)
+                {
+                    _logger.LogInformation("Signup successful for {Email}", request.Email);
 
-                _logger.LogInformation("Signup successful for {Email}", request.Email);
+                    return Ok(new { success = true, message = "Votre compte a été créé avec succès !" });
+                }
+                _logger.LogError("Signup failure for {Email}", request.Email);
 
-                return Ok(new { success = true, message = "Votre compte a été créé avec succès !" });
+                return StatusCode(400, "compte non créé: email ou mdp invalide");
             }
             catch (InvalidOperationException ex)
             {

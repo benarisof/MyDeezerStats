@@ -1,259 +1,253 @@
+// Import de la police Nunito
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&display=swap');
+
+// Variables de couleurs - Palette violet/rose moderne
+$deezer-bg: #0f0b16;
+$deezer-card-bg: rgba(26, 21, 37, 0.6);
+$deezer-card-hover: #2a2340;
+$deezer-primary: #bb86fc;
+$deezer-secondary: #03dac6;
+$deezer-text-primary: #ffffff;
+$deezer-text-secondary: #e0d6ff;
+$deezer-text-tertiary: #9a8db8;
+$deezer-accent: #ff79c6;
+$deezer-radius: 6px;
+$deezer-transition: all 0.2s ease-in-out;
+
+// Mixins
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin gradient-text {
+  background: linear-gradient(135deg, $deezer-primary 0%, $deezer-accent 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+// Global
+* {
+  font-family: 'Nunito', sans-serif;
+  box-sizing: border-box;
+}
+
 .dashboard-container {
-  padding: 2rem;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
+  background: radial-gradient(circle at top right, #1a1525, #0f0b16);
   min-height: 100vh;
-  font-family: 'Poppins', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  padding: 20px;
+  color: $deezer-text-primary;
+}
 
-  .loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(255, 255, 255, 0.8);
+// Section
+.section {
+  max-width: 1400px; // Largeur augmentée pour profiter des écrans larges
+  margin: 0 auto;
+
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 20px;
     display: flex;
-    justify-content: center;
     align-items: center;
-    z-index: 1000;
+    gap: 12px;
     
-    .spinner {
-      border: 5px solid #f3f3f3;
-      border-top: 5px solid #3498db;
-      border-radius: 50%;
-      width: 50px;
-      height: 50px;
-      animation: spin 1s linear infinite;
-    }
+    i { @include gradient-text; }
+  }
+}
+
+// Liste en mode "Tableau"
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px; // Très peu d'espace entre les lignes
+}
+
+// Carte horizontale compacte
+.card {
+  background: $deezer-card-bg;
+  border-radius: $deezer-radius;
+  padding: 6px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: $deezer-transition;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  min-height: 52px; // Hauteur très optimisée
+
+  &:hover {
+    background: $deezer-card-hover;
+    transform: translateX(5px);
+    border-color: rgba(187, 134, 252, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+
+    .rank-badge { background: $deezer-primary; color: $deezer-bg; }
+    .image-overlay { opacity: 1; }
+    .card-action { opacity: 1; transform: translateX(0); }
   }
 
-  .tools-container {
-    max-width: 1200px;
-    margin: 0 auto 2rem auto;
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    padding: 0 1rem;
+  // Rangs Podium
+  &:nth-child(1) .rank-badge { color: #FFD700; font-size: 16px; }
+  &:nth-child(2) .rank-badge { color: #C0C0C0; }
+  &:nth-child(3) .rank-badge { color: #CD7F32; }
+}
 
-    .period-selector-container {
-      min-width: 200px;
+// Bloc de gauche (Rang + Image)
+.rank-container {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-shrink: 0;
+  width: 90px; // Largeur fixe pour aligner le début du texte
+}
 
-      .period-selector {
-        width: 100%;
-        padding: 0.8rem 1.5rem 0.8rem 1rem;
-        border: none;
-        border-radius: 12px;
-        background-color: #fff;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-        font-family: 'Poppins', sans-serif;
-        font-size: 1rem;
-        cursor: pointer;
-        appearance: none;
-        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-        background-repeat: no-repeat;
-        background-position: right 0.7rem center;
-        background-size: 1rem;
-      }
-    }
+.rank-badge {
+  width: 25px;
+  font-weight: 800;
+  font-size: 13px;
+  color: $deezer-text-tertiary;
+  text-align: center;
+  transition: $deezer-transition;
+}
+
+.image-wrapper {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  
+  .card-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    &.artist-type { border-radius: 50%; }
+  }
+}
+
+.image-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  @include flex-center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  i { font-size: 12px; color: white; }
+}
+
+// Bloc central (Exploitation de la largeur)
+.card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: row; // Aligné en ligne
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+
+  h3 {
+    flex: 2; // Le titre prend le double d'espace
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    @include text-ellipsis;
+    
+    &.highlighted { color: $deezer-primary; }
   }
 
-  .section {
-    margin-bottom: 4rem;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
+  p {
+    flex: 1; // L'artiste ou l'album prend une part égale
+    font-size: 13px;
+    color: $deezer-text-secondary;
+    margin: 0;
+    @include text-ellipsis;
 
-    h2 {
-      margin-bottom: 2rem;
-      font-size: 2rem;
-      color: #2c3e50;
-      font-weight: 600;
-      position: relative;
-      padding-bottom: 0.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.8rem;
-
-      &::after {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 60px;
-        height: 4px;
-        background: linear-gradient(90deg, #3498db, #9b59b6);
-        border-radius: 2px;
-      }
-
-      i {
-        font-size: 1.5rem;
-        color: #3498db;
-      }
-
-      &.clickable {
-        cursor: pointer;
-        transition: color 0.2s ease;
-
-        &:hover {
-          color: #007bff;
-
-          i {
-            color: #007bff;
-          }
-        }
-      }
-    }
-  }
-
-  .card-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 2rem;
-  }
-
-  .card {
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 10px 20px rgba(0,0,0,0.08);
-    overflow: hidden;
-    text-align: center;
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    position: relative;
-    border: 1px solid rgba(255,255,255,0.2);
-    cursor: pointer;
-    z-index: 1;
-
-    &:hover {
-      transform: translateY(-8px) scale(1.05);
-      box-shadow: 0 15px 30px rgba(0,0,0,0.15);
-      z-index: 10;
+    &.listen-count {
+      flex: 0 0 120px; // Largeur fixe pour que les nombres soient alignés à droite
+      text-align: right;
+      font-size: 12px;
+      color: $deezer-text-tertiary;
+      font-weight: 500;
       
-      .card-content {
-        h3, p {
-          white-space: normal;
-          overflow: visible;
-          text-overflow: clip;
-          position: relative;
-          display: inline-block;
-          width: auto;
-          max-width: 100%;
-          
-          &::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -5px;
-            right: -5px;
-            bottom: 0;
-            background: rgba(255,255,255,0.9);
-            z-index: -1;
-            border-radius: 4px;
-            box-shadow: 0 0 10px rgba(255,255,255,0.8);
-          }
-        }
-      }
-    }
-
-    .rank {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      background: linear-gradient(135deg, #3498db, #9b59b6);
-      color: #fff;
-      padding: 6px 12px;
-      border-radius: 12px;
-      font-size: 0.9rem;
-      font-weight: bold;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      z-index: 2;
-    }
-
-    .card-image {
-      width: 100%;
-      height: 180px;
-      object-fit: cover;
-      transition: transform 0.3s ease;
-    }
-
-    &:hover .card-image {
-      transform: scale(1.05);
-    }
-
-    .card-content {
-      padding: 1.2rem;
-      min-height: 80px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-
-      h3 {
-        margin: 0.6rem 0;
-        font-size: 1.1rem;
-        color: #2c3e50;
-        font-weight: 600;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transition: all 0.2s ease;
-      }
-
-      p {
-        margin: 0.3rem 0;
-        font-size: 0.95rem;
-        color: #7f8c8d;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transition: all 0.2s ease;
-      }
+      &.highlighted { color: $deezer-secondary; }
     }
   }
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-  .dashboard-container {
-    padding: 1rem;
+// Bloc de droite (Action)
+.card-action {
+  width: 40px;
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0;
+  transform: translateX(10px);
+  transition: $deezer-transition;
 
-    .tools-container {
-      flex-direction: column;
-      align-items: stretch;
-
-      .period-selector-container {
-        width: 100%;
-        
-        .period-selector {
-          width: 100%;
-          max-width: 280px;
-          padding: 0.7rem 2.5rem 0.7rem 1.2rem;
-          font-size: 0.95rem;
-        }
-      }
-    }
-
-    .card-list {
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 1.2rem;
-    }
-
-    .section h2 {
-      font-size: 1.6rem;
-    }
-
-    .card {
-      &:hover {
-        transform: none;
-        
-        .card-content h3,
-        .card-content p {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          
-          &::after {
-            display: none;
-          }
-        }
-      }
+  .action-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid $deezer-primary;
+    background: transparent;
+    color: $deezer-primary;
+    cursor: pointer;
+    @include flex-center;
+    font-size: 12px;
+    
+    &:hover {
+      background: $deezer-primary;
+      color: $deezer-bg;
     }
   }
+}
+
+// Animations fluides
+.card {
+  animation: slideIn 0.3s ease-out forwards;
+  opacity: 0;
+  @for $i from 1 through 50 {
+    &:nth-child(#{$i}) { animation-delay: #{$i * 0.015}s; }
+  }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+// Responsive : on repasse en colonne sur mobile uniquement
+@media (max-width: 768px) {
+  .card-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    
+    h3 { font-size: 14px; width: 100%; }
+    p { font-size: 12px; width: 100%; }
+    p.listen-count { 
+      text-align: left; 
+      flex: none; 
+      margin-top: 2px;
+    }
+  }
+  
+  .rank-container { width: auto; }
+}
+
+// Scrollbar personnalisée
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: $deezer-bg; }
+::-webkit-scrollbar-thumb {
+  background: rgba(187, 134, 252, 0.2);
+  border-radius: 10px;
+  &:hover { background: $deezer-primary; }
 }

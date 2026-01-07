@@ -1,0 +1,36 @@
+<header class="main-header" *ngIf="loginService.isAuthenticated()">
+  <nav class="nav-tabs">
+    <a *ngFor="let link of navLinks" 
+       [routerLink]="link.path" 
+       routerLinkActive="active">
+      {{ link.label }}
+    </a>
+  </nav>
+
+  <div class="header-controls">
+    <div class="search-container">
+      <input type="text" 
+             [(ngModel)]="searchQuery" 
+             (input)="onSearchInput()" 
+             placeholder="Artistes, titres, albums...">
+      
+      <ul class="search-results" *ngIf="showSearchResults && filteredResults.length > 0">
+        <li *ngFor="let res of filteredResults" (click)="onSelectResult(res)">
+          <span class="type-badge">{{ res.type }}</span>
+          <span>{{ formatResult(res) }}</span>
+        </li>
+      </ul>
+    </div>
+
+    <select [(ngModel)]="selectedPeriod" (change)="onPeriodChange()" class="period-select">
+      <option *ngFor="let p of periods" [value]="p.value">{{ p.label }}</option>
+    </select>
+
+    <label class="upload-btn" [class.loading]="isUploading">
+      <input type="file" (change)="onFileSelected($event)" accept=".xlsx, .xls" style="display:none">
+      <span>{{ isUploading ? 'Chargement...' : 'Importer' }}</span>
+    </label>
+
+    <button (click)="logout()" class="logout-btn">Quitter</button>
+  </div>
+</header>

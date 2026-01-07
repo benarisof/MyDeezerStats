@@ -1,1 +1,39 @@
 /* You can add global styles to this file, and also import other style files */
+// Import des polices
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css');
+
+:root {
+  font-family: 'Nunito', sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  // Couleur de secours pour éviter le flash blanc au chargement
+  background-color: #0f0b16; 
+  background-image: radial-gradient(circle at top right, #1a1525, #0f0b16);
+  background-attachment: fixed;
+  color: #ffffff;
+  overflow-x: hidden;
+}
+
+// Nettoyage des conteneurs Angular
+.app-wrapper, .app-container, main {
+  background: transparent !important;
+}
+
+// Scrollbar personnalisée "Dark Mode"
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0f0b16;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2340;
+  border-radius: 10px;
+  border: 2px solid #0f0b16;
+  &:hover { background: #bb86fc; }
+}
