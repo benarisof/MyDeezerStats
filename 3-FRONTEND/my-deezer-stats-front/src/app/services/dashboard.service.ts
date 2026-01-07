@@ -91,31 +91,42 @@ export class DashboardService {
     });
   }
 
-  private getDateRange(period: string): { from: Date, to: Date } {
-    const currentDate = new Date();    
-    const year = currentDate.getFullYear();
-    const previousYear = year - 1;
+private getDateRange(period: string): { from: Date, to: Date } {
+  const to = new Date(); // Maintenant
+  let from = new Date();
   
-    switch (period) {
-      case "4weeks":
-        const endDate = new Date(this.last4Weeks); 
-        const startDate = new Date(endDate);
-        startDate.setDate(endDate.getDate() - 28); 
-        return { from: startDate, to: endDate };
-  
-      case "thisYear":
-        return { from: new Date(`${year}-01-01`), to: new Date(`${year}-12-31T23:59:59`) };
-  
-      case "lastYear":
-        return { from: new Date(`${previousYear}-01-01`), to: new Date(`${previousYear}-12-31T23:59:59`) };
-  
-      case "allTime":
-        return { from: new Date('2000-01-01'), to: currentDate };  
-  
-      default:
-        return { from: new Date('2000-01-01'), to: currentDate };
-    }
+  // Normalisation pour inclure toute la journée d'aujourd'hui
+  to.setHours(23, 59, 59, 999);
+
+  const year = new Date().getFullYear();
+
+  switch (period) {
+    case '30':
+    case '90':
+    case '180':
+      const days = parseInt(period);
+      from.setDate(to.getDate() - days);
+      from.setHours(0, 0, 0, 0); // Début de journée
+      break;
+
+    case "thisYear":
+      from = new Date(year, 0, 1, 0, 0, 0);
+      // 'to' reste aujourd'hui, c'est plus logique pour un dashboard
+      break;
+
+    case "lastYear":
+      from = new Date(year - 1, 0, 1, 0, 0, 0);
+      const lastYearTo = new Date(year - 1, 11, 31, 23, 59, 59);
+      return { from, to: lastYearTo };
+
+    case "allTime":
+    default:
+      from = new Date(2000, 0, 1, 0, 0, 0);
+      break;
   }
+
+  return { from, to };
+}
 
   search(query: string, types: ('album' | 'artist')[]): Observable<SearchResult[]> {
     if (!query || query.trim() === '') {

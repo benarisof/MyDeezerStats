@@ -5,12 +5,19 @@
   </div>
 
   <section class="section">
-    <h2>
-      <span class="clickable" (click)="goToTop('album')">
-        <i class="fa fa-compact-disc"></i> Top albums
-      </span>
-    </h2>
-    <div class="card-list">
+    <div class="section-header">
+      <h2>
+        <span class="clickable" (click)="goToTop('album')">
+          <i class="fa fa-compact-disc"></i> Top albums
+        </span>
+      </h2>
+      <div class="scroll-controls">
+        <button class="scroll-btn" (click)="scroll('albumList', -1)" title="Précédent"><i class="fas fa-chevron-left"></i></button>
+        <button class="scroll-btn" (click)="scroll('albumList', 1)" title="Suivant"><i class="fas fa-chevron-right"></i></button>
+      </div>
+    </div>
+    
+    <div class="card-list" id="albumList">
       <div *ngFor="let album of topAlbums; let i = index" class="card-wrapper">
         <div class="card" (click)="navigateToDetail('album', album)"
           [title]="album.title + (album.artist ? ' - ' + album.artist : '')">
@@ -27,12 +34,19 @@
   </section>
 
   <section class="section">
-    <h2>
-      <span class="clickable" (click)="goToTop('artist')">
-        <i class="fas fa-user"></i> Top artistes
-      </span>
-    </h2>
-    <div class="card-list">
+    <div class="section-header">
+      <h2>
+        <span class="clickable" (click)="goToTop('artist')">
+          <i class="fas fa-user"></i> Top artistes
+        </span>
+      </h2>
+      <div class="scroll-controls">
+        <button class="scroll-btn" (click)="scroll('artistList', -1)"><i class="fas fa-chevron-left"></i></button>
+        <button class="scroll-btn" (click)="scroll('artistList', 1)"><i class="fas fa-chevron-right"></i></button>
+      </div>
+    </div>
+
+    <div class="card-list" id="artistList">
       <div *ngFor="let artist of topArtists; let i = index" class="card-wrapper">
         <div class="card" (click)="navigateToDetail('artist', artist)"
           [title]="artist.artist">
@@ -48,12 +62,19 @@
   </section>
 
   <section class="section">
-    <h2>
-      <span class="clickable" (click)="goToTop('track')">
-        <i class="fas fa-music"></i> Top morceaux
-      </span>
-    </h2>
-    <div class="card-list">
+    <div class="section-header">
+      <h2>
+        <span class="clickable" (click)="goToTop('track')">
+          <i class="fas fa-music"></i> Top morceaux
+        </span>
+      </h2>
+      <div class="scroll-controls">
+        <button class="scroll-btn" (click)="scroll('trackList', -1)"><i class="fas fa-chevron-left"></i></button>
+        <button class="scroll-btn" (click)="scroll('trackList', 1)"><i class="fas fa-chevron-right"></i></button>
+      </div>
+    </div>
+
+    <div class="card-list" id="trackList">
       <div *ngFor="let song of topTracks; let i = index" class="card-wrapper">
         <div class="card"
           [title]="song.track + ' - ' + song.artist + (song.album ? ' (' + song.album + ')' : '')">

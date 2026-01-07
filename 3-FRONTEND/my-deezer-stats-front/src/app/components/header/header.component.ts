@@ -26,7 +26,9 @@ export class HeaderComponent implements OnInit {
 
   // Périodes
   periods = [
-    { value: '4weeks', label: '4 dernières semaines' },
+    { value: '30', label: '30 derniers jours' },
+    { value: '90', label: '90 derniers jours' },
+    { value: '180', label: '180 derniers jours' },
     { value: 'thisYear', label: 'Cette année' },
     { value: 'lastYear', label: 'Année dernière' },
     { value: 'allTime', label: 'Depuis le début' }

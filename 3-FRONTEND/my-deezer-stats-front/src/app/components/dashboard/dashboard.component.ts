@@ -47,9 +47,9 @@ ngOnInit(): void {
     switchMap(period => {
       // 2. On lance les appels
       return forkJoin([
-        this.dashboardService.getTopAlbums(period, 7), 
-        this.dashboardService.getTopArtists(period, 7),
-        this.dashboardService.getTopTracks(period, 7),
+        this.dashboardService.getTopAlbums(period, 10), 
+        this.dashboardService.getTopArtists(period, 10),
+        this.dashboardService.getTopTracks(period, 10),
         this.dashboardService.getRecentListens(period)
       ]).pipe(
         finalize(() => this.isLoading = false)
@@ -98,4 +98,16 @@ ngOnInit(): void {
       });
     }
   }
+
+  scroll(elementId: string, direction: number) {
+  const container = document.getElementById(elementId);
+  if (container) {
+    // On calcule la distance de scroll (environ 80% de la largeur visible)
+    const scrollAmount = container.clientWidth * 0.8;
+    container.scrollBy({
+      left: direction * scrollAmount,
+      behavior: 'smooth'
+    });
+  }
+}
 }
