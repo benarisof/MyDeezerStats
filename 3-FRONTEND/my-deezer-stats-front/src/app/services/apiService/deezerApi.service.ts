@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core'; // Ajouté inject
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -6,12 +6,14 @@ import { catchError, map } from 'rxjs/operators';
 import { Album, Artist, Track, Recent, SearchResult } from '../../models/dashboard.models';
 import { PeriodService } from '../period.service';
 import { FormatterService } from '../formatter.service';
+import { LoginService } from '../login.service'; 
 
 @Injectable({
   providedIn: 'root'
 })
 export class DashboardService {
   private readonly apiUrl = 'http://localhost:5000/api';
+  private loginService = inject(LoginService); // Ajouté
 
   constructor(
     private http: HttpClient,
@@ -160,7 +162,7 @@ export class DashboardService {
   // ============ MÉTHODES UTILITAIRES ============
 
   private getAuthHeaders(): HttpHeaders {
-    const token = localStorage.getItem('token');
+    const token = this.loginService.getToken(); 
     return new HttpHeaders({
       Authorization: `Bearer ${token}`
     });

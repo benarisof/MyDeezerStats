@@ -1,12 +1,12 @@
-<!-- login.component.html -->
 <div class="dashboard-container login-page">
   <section class="section">
-    <h2><i class="fas {{ isSignUp ? 'fa-user-plus' : 'fa-sign-in-alt' }}"></i> 
+    <h2>
+      <i class="fas" [ngClass]="isSignUp ? 'fa-user-plus' : 'fa-sign-in-alt'"></i> 
       {{ isSignUp ? 'Créer un compte' : 'Connexion' }}
     </h2>
 
-    <form (ngSubmit)="isSignUp ? signUp() : login()" #authForm="ngForm" class="login-form">
-      <!-- Champ Email -->
+    <form (ngSubmit)="handleAuth()" #authForm="ngForm" class="login-form" novalidate>
+      
       <div class="form-group">
         <label for="email">Email</label>
         <input
@@ -14,18 +14,19 @@
           name="email"
           type="email"
           [(ngModel)]="email"
+          #emailModel="ngModel"
           required
           email
+          autocomplete="email"
           placeholder="votre@email.com"
-          [class.invalid]="authForm.submitted && authForm.controls['email'].invalid"
+          [class.invalid]="authForm.submitted && emailModel.invalid"
         >
-        <div *ngIf="authForm.submitted && authForm.controls['email'].errors" class="validation-error">
-          <span *ngIf="authForm.controls['email'].errors['required']">Email requis</span>
-          <span *ngIf="authForm.controls['email'].errors['email']">Format email invalide</span>
+        <div *ngIf="authForm.submitted && emailModel.errors" class="validation-error">
+          <small *ngIf="emailModel.errors['required']">Email requis</small>
+          <small *ngIf="emailModel.errors['email']">Format email invalide</small>
         </div>
       </div>
 
-      <!-- Champ Mot de passe -->
       <div class="form-group">
         <label for="password">Mot de passe</label>
         <input
@@ -33,40 +34,42 @@
           name="password"
           type="password"
           [(ngModel)]="password"
+          #passwordModel="ngModel"
           required
           minlength="6"
+          autocomplete="{{ isSignUp ? 'new-password' : 'current-password' }}"
           placeholder="••••••"
-          [class.invalid]="authForm.submitted && authForm.controls['password'].invalid"
+          [class.invalid]="authForm.submitted && passwordModel.invalid"
         >
-        <div *ngIf="authForm.submitted && authForm.controls['password'].errors" class="validation-error">
-          <span *ngIf="authForm.controls['password'].errors['required']">Mot de passe requis</span>
-          <span *ngIf="authForm.controls['password'].errors['minlength']">6 caractères minimum</span>
+        <div *ngIf="authForm.submitted && passwordModel.errors" class="validation-error">
+          <small *ngIf="passwordModel.errors['required']">Mot de passe requis</small>
+          <small *ngIf="passwordModel.errors['minlength']">6 caractères minimum</small>
         </div>
       </div>
 
-      <!-- Message d'erreur global -->
-      <div *ngIf="errorMessage" class="error-message">
+      <div *ngIf="errorMessage" class="error-message" role="alert">
         <i class="fas fa-exclamation-circle"></i> {{ errorMessage }}
       </div>
 
-      <!-- Message de succès -->
-      <div *ngIf="successMessage" class="success-message">
+      <div *ngIf="successMessage" class="success-message" role="status">
         <i class="fas fa-check-circle"></i> {{ successMessage }}
       </div>
 
-      <!-- Bouton de soumission -->
       <button type="submit" [disabled]="isLoading" class="submit-btn">
-        <span *ngIf="!isLoading">{{ isSignUp ? 'Créer le compte' : 'Se connecter' }}</span>
-        <span *ngIf="isLoading">
-          <span class="spinner"></span> {{ isSignUp ? 'Création...' : 'Connexion...' }}
-        </span>
+        <ng-container *ngIf="!isLoading">
+          {{ isSignUp ? 'Créer le compte' : 'Se connecter' }}
+        </ng-container>
+        
+        <ng-container *ngIf="isLoading">
+          <span class="spinner" aria-hidden="true"></span> 
+          <span>{{ isSignUp ? 'Création...' : 'Connexion...' }}</span>
+        </ng-container>
       </button>
 
-      <!-- Lien pour basculer entre connexion et création de compte -->
       <div class="footer-links">
-        <a (click)="toggleAuthMode()">
+        <button type="button" class="link-btn" (click)="toggleAuthMode()">
           {{ isSignUp ? 'Déjà un compte ? Se connecter' : 'Pas encore de compte ? Créer un compte' }}
-        </a>
+        </button>
       </div>
     </form>
   </section>

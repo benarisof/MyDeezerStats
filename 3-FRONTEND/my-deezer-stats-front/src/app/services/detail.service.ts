@@ -1,18 +1,21 @@
+// src/app/services/detail.service.ts
 import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core'; // Ajouté inject si besoin
 import { catchError, throwError, Observable } from 'rxjs';
 import { AlbumItem, ArtistItem, DetailItem } from '../models/detail.models';
+import { LoginService } from './login.service'; // Ajouté : Injection de LoginService
 
 @Injectable({
   providedIn: 'root'
 })
 export class DetailService {
   private readonly apiUrl = 'http://localhost:5000/api';
+  private loginService = inject(LoginService); // Ajouté : Utilise inject pour standalone
 
   constructor(private http: HttpClient) { }
 
   private getAuthHeaders(): HttpHeaders {
-    const token = localStorage.getItem('auth_token');
+    const token = this.loginService.getToken(); // Modifié : Utilise service au lieu de localStorage
     return new HttpHeaders({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`

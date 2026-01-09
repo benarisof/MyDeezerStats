@@ -306,6 +306,6 @@ $deezer-transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
 @media (max-width: 768px) {
   .card:hover {
-    transform: translateY(-8px) scale(1);  // Ajout : Désactive le scale sur mobile (pas de hover fiable)
+    transform: translateY(-8px) scale(1);  
   }
 }

@@ -3,7 +3,6 @@ export interface Album {
   artist: string;
   count: number;
   coverUrl: string;
-  //totalDuration: number;
   totalListening: number;
 }
 
