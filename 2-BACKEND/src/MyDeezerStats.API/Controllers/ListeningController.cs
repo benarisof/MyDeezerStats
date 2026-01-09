@@ -60,9 +60,17 @@ namespace MyDeezerStats.API.Controllers
         /// <param name="identifier">Identifiant de l'album (format: titre|artiste)</param>
         //[Authorize]
         [HttpGet("album")]
-        public async Task<IActionResult> GetAlbum([FromQuery][Required] string? identifier)
+        public async Task<IActionResult> GetAlbum([FromQuery][Required] string? identifier, [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to)
         {
             _logger.LogInformation("GET /album called with identifier={Identifier}", identifier);
+
+            // Validation des dates
+            if (from > to)
+            {
+                _logger.LogWarning("Invalid date range: from={From} to={To}", from, to);
+                return BadRequest("La date 'from' ne peut pas être après la date 'to'");
+            }
 
             if (string.IsNullOrWhiteSpace(identifier))
             {
@@ -72,7 +80,7 @@ namespace MyDeezerStats.API.Controllers
 
             try
             {
-                var result = await _service.GetAlbumAsync(identifier);
+                var result = await _service.GetAlbumAsync(identifier, from, to);
                 _logger.LogInformation("Successfully retrieved album {Identifier}", identifier);
                 return Ok(result);
             }

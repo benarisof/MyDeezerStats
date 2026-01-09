@@ -108,13 +108,21 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
                 };
 
                 var result = await _collection.Aggregate<BsonDocument>(pipeline).FirstOrDefaultAsync();
-
-                return result == null ? null : MapToAlbumListening(result);
+                if (result is null)
+                {
+                    return new AlbumListening
+                    {
+                        Artist = artist,
+                        Title = title,
+                        ListeningTime = 0
+                    };
+                }
+                return MapToAlbumListening(result);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting album details for {Title}", title);
-                throw new ApplicationException("Erreur récupération détails album", ex);
+                throw new ApplicationException("Error getting album", ex);
             }
         }
 

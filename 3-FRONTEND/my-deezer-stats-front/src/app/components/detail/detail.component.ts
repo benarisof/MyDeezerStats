@@ -3,9 +3,11 @@ import { CommonModule, Location } from '@angular/common';
 import { LoginService } from '../../services/login.service';
 import { Router, ActivatedRoute } from '@angular/router';
 import { DetailService } from '../../services/detail.service';
+import { PeriodService } from '../../services/period.service'; // Ajouté : Import de PeriodService
 import { DurationPipe } from '../../shared/pipes/duration.pipe';
 import { AlbumItem, ArtistItem, DetailItem } from '../../models/detail.models';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { combineLatest } from 'rxjs'; // Ajouté : Pour combiner observables
 
 @Component({
   selector: 'app-detail',
@@ -25,7 +27,8 @@ export class DetailComponent implements OnInit {
     private loginService: LoginService,
     private router: Router,
     private route: ActivatedRoute,
-    private detailService: DetailService
+    private detailService: DetailService,
+    private periodService: PeriodService // Ajouté : Injection de PeriodService
   ) {}
 
   ngOnInit(): void {
@@ -34,22 +37,26 @@ export class DetailComponent implements OnInit {
       return;
     }
   
-    this.route.params.pipe(
-        takeUntilDestroyed(this.destroyRef)
-    ).subscribe(params => {
-      const type = params['type'] as 'album' | 'artist' ;
+    combineLatest([
+      this.route.params,
+      this.periodService.period$
+    ]).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe(([params, period]) => {
+      const type = params['type'] as 'album' | 'artist';
       const identifier = this.route.snapshot.queryParams['identifier'];
-      if (identifier) {
-        this.loadDetailData(type, identifier);
+      if (identifier && period) {
+        this.loadDetailData(type, identifier, period);
       } else {
         this.router.navigate(['/dashboard']);
       }
     });
   }
 
-  loadDetailData(type: 'album' | 'artist', identifier: string): void {
-    this.detailService.getDetails(type, identifier).pipe(
-        takeUntilDestroyed(this.destroyRef)
+  loadDetailData(type: 'album' | 'artist', identifier: string, period: string): void {
+    this.loading = true; // Réinitialiser le loading à chaque changement
+    this.detailService.getDetails(type, identifier, period).pipe(
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: (data) => {
         this.item = this.mapDataToItem(type, data);
@@ -86,4 +93,5 @@ export class DetailComponent implements OnInit {
   goBack(): void {
     this.location.back();
   } 
+
 }

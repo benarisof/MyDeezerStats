@@ -124,11 +124,12 @@ namespace MyDeezerStats.Application.Services
 
         #region Public Methods - Details
 
-        public async Task<FullAlbumInfos> GetAlbumAsync(string fullId)
+        public async Task<FullAlbumInfos> GetAlbumAsync(string fullId, DateTime? from, DateTime? to)
         {
             var (title, artist) = ParseFullId(fullId);
+            var nb = ValidateParams(from, to, 0);
 
-            var album = await _albumRepository.GetAlbumDetailsAsync(title, artist, null, null)
+            var album = await _albumRepository.GetAlbumDetailsAsync(title, artist, from, to)
                         ?? throw new NotFoundException($"Album '{title}' par '{artist}' non trouvé");
             var albumFull = await _deezerService.EnrichFullAlbumWithDeezerData(album);
             albumFull.TotalListening = albumFull.TrackInfos.Sum(track => track.TotalListening);
