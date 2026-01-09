@@ -91,14 +91,4 @@
     </div>
   </section>
 
-  <section class="section">
-    <h2><i class="fas fa-history"></i> Dernières écoutes</h2>
-    <div class="last-listened">
-      <div *ngFor="let song of recentListens" class="last-item">
-        <p><strong>{{ song.track }}</strong> - {{ song.artist }}</p>
-        <span class="listened-date">{{ song.date | date:'short' }}</span>
-      </div>
-    </div>
-  </section>
-
 </div>

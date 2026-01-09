@@ -4,6 +4,7 @@ import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DetailComponent } from './components/detail/detail.component';
 import { authGuard } from './guards/auth.guard';
 import { TopListComponent } from './components/top-list/top-list.component';
+import { HistoriqueComponent } from './components/historique/historique.component';
 
 export const routes: Routes = [
   { 
@@ -11,6 +12,7 @@ export const routes: Routes = [
     component: DashboardComponent,
     canActivate: [authGuard] // Protection par JWT
   },
+  { path: 'historique', component: HistoriqueComponent },
   {
     path: 'top/:type',
     component: TopListComponent,

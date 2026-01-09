@@ -1,7 +1,7 @@
-// Import de la police Nunito
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&display=swap');
+// Import de la police Nunito (déjà dans le global, mais on peut le rappeler si besoin)
+// @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&display=swap');
 
-// Variables de couleurs - Palette violet/rose moderne
+// Variables de couleurs - Palette violet/rose moderne (copiées pour indépendance)
 $deezer-bg: #0f0b16;
 $deezer-card-bg: rgba(26, 21, 37, 0.6);
 $deezer-card-hover: #2a2340;
@@ -14,7 +14,7 @@ $deezer-accent: #ff79c6;
 $deezer-radius: 6px;
 $deezer-transition: all 0.2s ease-in-out;
 
-// Mixins
+// Mixins (copiés pour cohérence)
 @mixin flex-center {
   display: flex;
   align-items: center;
@@ -34,22 +34,22 @@ $deezer-transition: all 0.2s ease-in-out;
   background-clip: text;
 }
 
-// Global
-* {
-  font-family: 'Nunito', sans-serif;
-  box-sizing: border-box;
-}
-
+// Global (adapté au composant)
 .dashboard-container {
   background: radial-gradient(circle at top right, #1a1525, #0f0b16);
   min-height: 100vh;
   padding: 20px;
   color: $deezer-text-primary;
+
+  &.loading {
+    opacity: 0.5;
+    pointer-events: none;
+  }
 }
 
 // Section
 .section {
-  max-width: 1400px; // Largeur augmentée pour profiter des écrans larges
+  max-width: 1400px;
   margin: 0 auto;
 
   h2 {
@@ -66,11 +66,11 @@ $deezer-transition: all 0.2s ease-in-out;
   }
 }
 
-// Liste en mode "Tableau"
+// Liste en mode "Carte" inspiré du top-list
 .card-list {
   display: flex;
   flex-direction: column;
-  gap: 4px; // Très peu d'espace entre les lignes
+  gap: 4px;
 }
 
 // Carte horizontale compacte
@@ -78,13 +78,13 @@ $deezer-transition: all 0.2s ease-in-out;
   background: $deezer-card-bg;
   border-radius: $deezer-radius;
   padding: 6px 16px;
-  cursor: pointer;
+  cursor: default;
   display: flex;
   align-items: center;
   gap: 20px;
   transition: $deezer-transition;
   border: 1px solid rgba(255, 255, 255, 0.03);
-  min-height: 52px; // Hauteur très optimisée
+  min-height: 52px;
 
   &:hover {
     background: $deezer-card-hover;
@@ -97,25 +97,12 @@ $deezer-transition: all 0.2s ease-in-out;
       color: $deezer-bg; 
     }
     
-    // Effet de zoom sur l'image au survol
     .card-image.zoomed {
       transform: scale(1.05);
     }
   }
 
-  // Rangs Podium
-  &:nth-child(1) .rank-badge { 
-    color: #FFD700; 
-    font-size: 16px; 
-  }
-  
-  &:nth-child(2) .rank-badge { 
-    color: #C0C0C0; 
-  }
-  
-  &:nth-child(3) .rank-badge { 
-    color: #CD7F32; 
-  }
+  // Pas de podium spécifique pour l'historique, mais on garde les styles
 }
 
 // Bloc de gauche (Rang + Image)
@@ -124,7 +111,7 @@ $deezer-transition: all 0.2s ease-in-out;
   align-items: center;
   gap: 15px;
   flex-shrink: 0;
-  width: 90px; // Largeur fixe pour aligner le début du texte
+  width: 90px;
 }
 
 .rank-badge {
@@ -150,27 +137,23 @@ $deezer-transition: all 0.2s ease-in-out;
     object-fit: cover;
     transition: transform 0.2s ease;
     
-    &.artist-type { 
-      border-radius: 50%; 
-    }
-    
     &.zoomed {
       transform: scale(1.05);
     }
   }
 }
 
-// Bloc central (Exploitation de la largeur)
+// Bloc central (adapté pour historique : Morceau, Artiste, Écoutes, Dernière écoute)
 .card-content {
   flex: 1;
   display: flex;
-  flex-direction: row; // Aligné en ligne
+  flex-direction: row;
   align-items: center;
   gap: 24px;
   min-width: 0;
 
   h3 {
-    flex: 2; // Le titre prend le double d'espace
+    flex: 2; // Morceau prend plus d'espace
     font-size: 14px;
     font-weight: 600;
     margin: 0;
@@ -182,14 +165,14 @@ $deezer-transition: all 0.2s ease-in-out;
   }
 
   p {
-    flex: 1; // L'artiste ou l'album prend une part égale
+    flex: 1; // Artiste prend une part
     font-size: 13px;
     color: $deezer-text-secondary;
     margin: 0;
     @include text-ellipsis;
 
     &.listen-count {
-      flex: 0 0 120px; // Largeur fixe pour que les nombres soient alignés à droite
+      flex: 0 0 80px; // Écoutes : largeur fixe pour alignement
       text-align: right;
       font-size: 12px;
       color: $deezer-text-tertiary;
@@ -197,6 +180,18 @@ $deezer-transition: all 0.2s ease-in-out;
       
       &.highlighted { 
         color: $deezer-secondary; 
+      }
+    }
+
+    &.last-listen {
+      flex: 0 0 150px; // Dernière écoute : largeur fixe pour alignement
+      text-align: right;
+      font-size: 12px;
+      color: $deezer-text-tertiary;
+      font-weight: 500;
+      
+      &.highlighted { 
+        color: $deezer-accent; 
       }
     }
   }
@@ -225,7 +220,7 @@ $deezer-transition: all 0.2s ease-in-out;
   }
 }
 
-// Responsive : on repasse en colonne sur mobile uniquement
+// Responsive : sur mobile, passer en colonne
 @media (max-width: 768px) {
   .card-content {
     flex-direction: column;
@@ -242,7 +237,8 @@ $deezer-transition: all 0.2s ease-in-out;
       width: 100%; 
     }
     
-    p.listen-count { 
+    p.listen-count, 
+    p.last-listen { 
       text-align: left; 
       flex: none; 
       margin-top: 2px;
@@ -254,7 +250,7 @@ $deezer-transition: all 0.2s ease-in-out;
   }
 }
 
-// Scrollbar personnalisée
+// Scrollbar personnalisée (si besoin dans le composant)
 ::-webkit-scrollbar { 
   width: 8px; 
 }
@@ -272,6 +268,35 @@ $deezer-transition: all 0.2s ease-in-out;
   }
 }
 
+// --- LOADING OVERLAY ---
+.loading-overlay {
+  position: absolute; 
+  top: 0; 
+  left: 0; 
+  right: 0; 
+  bottom: 0;
+  background: rgba(15, 11, 22, 0.95);
+  z-index: 100; 
+  @include flex-center; 
+  backdrop-filter: blur(12px);
+
+  .spinner {
+    width: 56px; 
+    height: 56px;
+    border: 3px solid rgba(187, 134, 252, 0.1);
+    border-top-color: $deezer-primary;
+    border-radius: 50%;
+    animation: spin 1.2s infinite linear;
+  }
+}
+
+@keyframes spin { 
+  to { 
+    transform: rotate(360deg); 
+  } 
+}
+
+// Ajouter position relative au container pour positionner l'overlay
 .dashboard-container {
   position: relative; // Ajoutez cette ligne
   background: radial-gradient(circle at top right, #1a1525, #0f0b16);

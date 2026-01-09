@@ -12,6 +12,7 @@ import { FormatterService } from '../../services/formatter.service';
 import { NavigationService } from '../../services/navigation.service';
 import { SearchResult } from '../../models/dashboard.models'; 
 import { PERIODS, DEFAULT_PERIOD } from '../../models/period.model';
+import { HistoriqueComponent } from '../historique/historique.component';
 
 @Component({
   selector: 'app-header',
@@ -21,13 +22,14 @@ import { PERIODS, DEFAULT_PERIOD } from '../../models/period.model';
   styleUrls: ['./header.component.scss']
 })
 export class HeaderComponent implements OnInit {
-  private destroyRef = inject(DestroyRef); // Injecte la référence de destruction
+  private destroyRef = inject(DestroyRef); 
 
   navLinks = [
     { label: 'Dashboard', path: '/dashboard' },
     { label: 'Top Albums', path: '/top/album' },
-    { label: 'Top Artists', path: '/top/artist' },
-    { label: 'Top Tracks', path: '/top/track' }
+    { label: 'Top Artistes', path: '/top/artist' },
+    { label: 'Top Morceaux', path: '/top/track' },
+    { label: 'Dernieres écoutes', path: '/historique'}
   ];
 
   periods = PERIODS;
@@ -65,7 +67,7 @@ export class HeaderComponent implements OnInit {
         this.showSearchResults = true;
       }),
       switchMap(term => this.dashboardService.search(term, ['artist', 'album'])),
-      takeUntilDestroyed(this.destroyRef) // Sécurité : arrêt auto à la destruction du composant
+      takeUntilDestroyed(this.destroyRef) 
     ).subscribe({
       next: (results: SearchResult[]) => {
         this.filteredResults = results;
@@ -81,7 +83,7 @@ export class HeaderComponent implements OnInit {
   private setupNavigationListener(): void {
     this.router.events.pipe(
       filter(event => event instanceof NavigationEnd),
-      takeUntilDestroyed(this.destroyRef) // Sécurité : évite d'écouter le routeur indéfiniment
+      takeUntilDestroyed(this.destroyRef) 
     ).subscribe(() => {
       this.closeSearch();
     });

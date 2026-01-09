@@ -26,9 +26,10 @@ export interface Track{
 export interface Recent {
   track: string;
   artist: string;
-  album: string;
-  date: string; 
-  imageUrl?: string;
+  trackUrl?: string;
+  count: number;              
+  lastListen: string;        
+  formattedTime: string;      
 }
 
 export interface SearchResult {

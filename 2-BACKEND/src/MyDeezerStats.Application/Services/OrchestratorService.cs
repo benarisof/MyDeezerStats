@@ -6,6 +6,7 @@ using MyDeezerStats.Domain.Entities;
 using MyDeezerStats.Domain.Entities.ListeningInfos;
 using MyDeezerStats.Domain.Exceptions;
 using MyDeezerStats.Domain.Repositories;
+using System.Collections.Concurrent;
 
 namespace MyDeezerStats.Application.Services
 {
@@ -151,33 +152,37 @@ namespace MyDeezerStats.Application.Services
 
         #region Recent Listenings & Sync
 
-        public async Task<IEnumerable<ListeningDto>> GetLatestListeningsAsync(int limit = 100)
+        public async Task<IEnumerable<ApiTrackInfos>> GetLatestListeningsAsync(int limit = 100)
         {
+            // 1. Synchro LastFM (inchangé, mais encapsulé dans un try/catch)
             try
             {
-                // 1. Récupérer la date la plus récente en base 
-                var lastEntry = await _repository.GetLastEntryAsync();
-                var lastStreamDate = lastEntry?.Date ?? DateTime.MinValue;
-
-                // 2. Synchro LastFM
-                var newTracks = await _lastFmService.GetListeningHistorySince(lastStreamDate);
-
-                if (newTracks.Any())
-                {
-                    var entities = newTracks.Select(MapToEntity).ToList();
-                    await _repository.InsertListeningsAsync(entities);
-                }
-
-                // 3. Toujours renvoyer la source de vérité (la base de données)
-                var localEntries = await _repository.GetRecentListeningsAsync(limit);
-                return localEntries.Select(MapToDto);
+                await SynchronizeWithLastFmAsync();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sync recent tracks");
-                var localEntries = await _repository.GetRecentListeningsAsync(limit);
-                return localEntries.Select(MapToDto);
+                _logger.LogWarning(ex, "LastFM Sync failed, using local cache.");
             }
+
+            // 2. Récupération des données locales
+            var localEntries = await _repository.GetRecentListeningsAsync(limit);
+            if (!localEntries.Any()) return Enumerable.Empty<ApiTrackInfos>();
+
+            // 3. Récupération des counts en UNE SEULE FOIS (Correction du N+1)
+            var countsMap = await _repository.GetBatchStreamCountsAsync(localEntries);
+
+            // 4. Mapping initial
+            var tracks = localEntries.Select(e =>
+            {
+                var track = MapEntryToTrack(e);
+                // AJOUT DU TRIM ICI
+                var key = $"{e.Artist.Trim().ToLower()}|{e.Track.Trim().ToLower()}";
+                track.StreamCount = countsMap.TryGetValue(key, out var count) ? count : 1;
+                return track;
+            }).ToList();
+
+            // 5. Enrichissement parallèle (Deezer) avec ton Semaphore
+            return await EnrichTracksAsync(tracks);
         }
 
         #endregion
@@ -205,15 +210,59 @@ namespace MyDeezerStats.Application.Services
             return (Uri.UnescapeDataString(parts[0].Trim()), Uri.UnescapeDataString(parts[1].Trim()));
         }
 
+        private async Task SynchronizeWithLastFmAsync()
+        {
+            // C'est exactement ton code d'origine déplacé ici pour la propreté
+            var lastEntry = await _repository.GetLastEntryAsync();
+            var lastStreamDate = lastEntry?.Date ?? DateTime.MinValue;
+            var newTracks = await _lastFmService.GetListeningHistorySince(lastStreamDate);
+
+            if (newTracks.Any())
+            {
+                var entities = newTracks.Select(MapToEntity).ToList();
+                await _repository.InsertListeningsAsync(entities);
+            }
+        }
+
+        // Méthode privée pour centraliser l'enrichissement
+        private async Task<List<ApiTrackInfos>> EnrichTracksAsync(List<TrackListening> tracks)
+        {
+            using var semaphore = new SemaphoreSlim(5);
+            var cache = new ConcurrentDictionary<string, ApiTrackInfos>();
+
+            var tasks = tracks.Select(async track =>
+            {
+                string cacheKey = $"{track.Artist}-{track.Name}".ToLower();
+
+                // Si on a déjà enrichi ce morceau dans cette requête, on réutilise
+                if (cache.TryGetValue(cacheKey, out var cached)) return cached;
+
+                await semaphore.WaitAsync();
+                try
+                {
+                    var enriched = await _deezerService.EnrichTrackWithDeezerData(track);
+                    cache.TryAdd(cacheKey, enriched);
+                    return enriched;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Enrichment failed for {Track}", track.Name);
+                    return MapToBasicTrackInfo(track);
+                }
+                finally { semaphore.Release(); }
+            });
+
+            return (await Task.WhenAll(tasks)).ToList();
+        }
+
         // --- Mappings ---
 
-        private ListeningDto MapToDto(ListeningEntry x) => new()
+        private TrackListening MapEntryToTrack(ListeningEntry entry) => new()
         {
-            Track = x.Track,
-            Artist = x.Artist,
-            Album = x.Album,
-            Date = x.Date,
-            Duration = x.Duration
+            Album = entry.Album,
+            Artist = entry.Artist,
+            LastListening = entry.Date.ToString(),
+            Name = entry.Track
         };
 
         private ListeningEntry MapToEntity(ListeningDto x) => new()

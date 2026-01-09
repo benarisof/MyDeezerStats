@@ -76,13 +76,9 @@ export class DashboardService {
     );
   }
 
-  getRecentListens(period: string): Observable<Recent[]> {
-    const dateRange = this.periodService.getDateRange(period);
-    const params = this.buildQueryParams(dateRange);
-
+  getRecentListens(): Observable<Recent[]> {
     return this.http.get<Recent[]>(`${this.apiUrl}/listening/recent`, {
       headers: this.getAuthHeaders(),
-      params
     }).pipe(
       map(recents => this.enrichRecents(recents)),
       catchError(this.handleError)
@@ -140,13 +136,15 @@ export class DashboardService {
     }));
   }
 
-  private enrichRecents(recents: Recent[]): Recent[] {
-    return recents.map(recent => ({
-      ...recent,
-      displayTitle: `${recent.artist} - ${recent.track}`,
-      formattedTime: this.formatTime(recent.date)
-    }));
-  }
+  private enrichRecents(recents: any[]): Recent[] {
+  return recents.map(recent => ({
+    ...recent,
+    // On s'assure que displayTitle est bien généré
+    displayTitle: `${recent.artist} - ${recent.track}`,
+    // On formate le temps en passant la date reçue
+    formattedTime: this.formatTime(recent.lastListen)
+  }));
+}
 
   private formatSearchResults(results: SearchResult[]): SearchResult[] {
     return results.map(result => ({
@@ -234,7 +232,6 @@ export class DashboardService {
       topAlbums: this.getTopAlbums(period, 10),
       topArtists: this.getTopArtists(period, 10),
       topTracks: this.getTopTracks(period, 10),
-      recentListens: this.getRecentListens(period)
     };
   }
 }

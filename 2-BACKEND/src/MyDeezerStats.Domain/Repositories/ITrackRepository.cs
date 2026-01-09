@@ -1,4 +1,5 @@
-﻿using MyDeezerStats.Domain.Entities.ListeningInfos;
+﻿using MyDeezerStats.Domain.Entities;
+using MyDeezerStats.Domain.Entities.ListeningInfos;
 
 namespace MyDeezerStats.Domain.Repositories
 {

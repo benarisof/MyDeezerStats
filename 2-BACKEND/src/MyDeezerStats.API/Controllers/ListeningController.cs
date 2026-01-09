@@ -211,7 +211,7 @@ namespace MyDeezerStats.API.Controllers
         /// <summary>
         /// Récupère les écoutes récentes
         /// </summary>
-        [Authorize]
+        //[Authorize]
         [HttpGet("recent")]
         public async Task<IActionResult> GetRecentTracks()
         {

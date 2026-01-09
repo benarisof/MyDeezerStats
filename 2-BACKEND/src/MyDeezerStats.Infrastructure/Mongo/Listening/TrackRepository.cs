@@ -1,9 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MyDeezerStats.Domain.Entities;
 using MyDeezerStats.Domain.Entities.ListeningInfos;
 using MyDeezerStats.Domain.Repositories;
 using MyDeezerStats.Infrastructure.Mongo.Shared;
+using System.Text.RegularExpressions;
 
 namespace MyDeezerStats.Infrastructure.Mongo.Repositories
 {
@@ -68,6 +70,7 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
             }
         }
 
+        
         private static TrackListening MapToTrackListening(BsonDocument doc)
         {
             return new TrackListening
@@ -80,5 +83,7 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
                 LastListening = doc[DbFields.LastListening].ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             };
         }
+
+
     }
 }

@@ -62,7 +62,7 @@ export class LoginService {
   isAuthenticated(): boolean {
     const isValid = this.checkTokenValidity();
     if (!isValid && this.authStatus.value) {
-      this.authStatus.next(false); // On synchronise l'état si le token a expiré
+      this.authStatus.next(false); 
     }
     return isValid;
   }
@@ -90,7 +90,6 @@ export class LoginService {
     if (error.status === 401) errorMessage = 'Identifiants incorrects';
     if (error.status === 409) errorMessage = 'Cet utilisateur existe déjà';
     
-    // On priorise le message renvoyé par l'API .NET
     const apiMessage = error.error?.message || error.error;
     return throwError(() => new Error(typeof apiMessage === 'string' ? apiMessage : errorMessage));
   }

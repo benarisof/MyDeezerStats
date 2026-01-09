@@ -65,7 +65,6 @@ export class DetailService {
 
   // ============ PROPRIÉTÉS PUBLIQUES DÉLÉGUÉES ============
   
-  // Délégation des méthodes de période au PeriodService (inspiré du DashboardService)
   get period$() {
     return this.periodService.period$;
   }

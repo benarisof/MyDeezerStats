@@ -52,13 +52,12 @@ export class DashboardComponent implements OnInit {
           finalize(() => this.isLoading = false)
         );
       }),
-      takeUntilDestroyed(this.destroyRef) // Remplace le manuel unsubscribe()
+      takeUntilDestroyed(this.destroyRef) 
     ).subscribe({
-      next: ({ topAlbums, topArtists, topTracks, recentListens }) => {
+      next: ({ topAlbums, topArtists, topTracks }) => {
         this.topAlbums = topAlbums;
         this.topArtists = topArtists;
         this.topTracks = topTracks;
-        this.recentListens = recentListens;
       },
       error: (err) => {
         this.errorMessage = err.message || 'Erreur lors du chargement des données';

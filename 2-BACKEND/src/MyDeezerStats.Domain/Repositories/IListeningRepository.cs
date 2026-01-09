@@ -10,5 +10,7 @@ namespace MyDeezerStats.Domain.Repositories
         Task<List<ListeningEntry>> GetRecentListeningsAsync(int limit);
         Task InsertListeningsAsync(List<ListeningEntry> listenings);
         Task<ListeningEntry?> GetLastEntryAsync();
+
+        Task<Dictionary<string, int>> GetBatchStreamCountsAsync(IEnumerable<ListeningEntry> entries);
     }
 }

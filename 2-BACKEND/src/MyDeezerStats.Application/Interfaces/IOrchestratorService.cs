@@ -10,7 +10,7 @@ namespace MyDeezerStats.Application.Interfaces
         Task<List<ShortArtistInfos>> GetTopArtistsAsync(DateTime? from, DateTime? to, int nb = 5);
         Task<FullArtistInfos> GetArtistAsync(string identifier);
         Task<List<ApiTrackInfos>> GetTopTracksAsync(DateTime? from, DateTime? to, int nb = 5);
-        Task<IEnumerable<ListeningDto>> GetLatestListeningsAsync(int limit = 100);
+        Task<IEnumerable<ApiTrackInfos>> GetLatestListeningsAsync(int limit = 100);
 
     }
 }
