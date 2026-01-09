@@ -91,7 +91,6 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
                     // Second group : On regroupe tout sous l'artiste pour formater la réponse
                     new BsonDocument("$group", new BsonDocument {
                         { "_id", artist },
-                        // CORRECTION : Utilisation de DbFields.StreamCountByTrack pour la cohérence avec PipelineHelper
                         { DbFields.StreamCountByTrack, new BsonDocument("$push", new BsonDocument {
                             { DbFields.Track, "$_id" },
                             { "Count", "$Count" }
@@ -113,7 +112,6 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
 
         private static ArtistListening MapToArtistListening(BsonDocument doc)
         {
-            // Si OriginalName existe (vient du Top), sinon on prend l'ID (vient de Details)
             var name = doc.Contains("OriginalName") ? doc["OriginalName"].AsString : doc["_id"].AsString;
 
             return new ArtistListening

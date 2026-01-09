@@ -25,7 +25,7 @@ namespace MyDeezerStats.API.Controllers
         /// <param name="from">Date de début (optionnelle)</param>
         /// <param name="to">Date de fin (optionnelle)</param>
         /// <param name="nb">Nombre d'albums à retourner (1-100, défaut: 10)</param>
-        //[Authorize]
+        [Authorize]
         [HttpGet("top-albums")]
         public async Task<IActionResult> GetTopAlbums(
             [FromQuery] DateTime? from,
@@ -58,7 +58,7 @@ namespace MyDeezerStats.API.Controllers
         /// Récupère les détails d'un album spécifique
         /// </summary>
         /// <param name="identifier">Identifiant de l'album (format: titre|artiste)</param>
-        //[Authorize]
+        [Authorize]
         [HttpGet("album")]
         public async Task<IActionResult> GetAlbum([FromQuery][Required] string? identifier, [FromQuery] DateTime? from,
             [FromQuery] DateTime? to)

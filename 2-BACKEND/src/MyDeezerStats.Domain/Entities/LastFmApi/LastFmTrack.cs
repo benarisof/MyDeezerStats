@@ -91,7 +91,6 @@ public class ArtistNameConverter : JsonConverter<string>
     {
         using (JsonDocument doc = JsonDocument.ParseValue(ref reader))
         {
-            // Supporte à la fois l'objet artiste et le texte direct
             if (doc.RootElement.TryGetProperty("#text", out var text))
                 return text.GetString() ?? ""; 
             if (doc.RootElement.TryGetProperty("name", out var name))
@@ -129,7 +128,7 @@ public class AlbumNameConverter : JsonConverter<string>
     }
 }
 
-// Convertisseur pour les timestamps UNIX (inchangé)
+// Convertisseur pour les timestamps 
 public class UnixTimestampConverter : JsonConverter<DateTime?>
 {
     public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

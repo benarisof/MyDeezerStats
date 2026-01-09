@@ -64,7 +64,7 @@ namespace MyDeezerStats.Application.Services
                     throw new InvalidOperationException("Le fichier Excel ne contient pas la feuille attendue à l'index 8");
 
                 var sheet = dataSet.Tables[8];
-                result.TotalRows = sheet.Rows.Count; // Avec UseHeaderRow=true, Rows.Count est déjà le nombre de données
+                result.TotalRows = sheet.Rows.Count; 
 
                 _logger.LogDebug("Feuille chargée : {RowCount} lignes détectées", result.TotalRows);
 
@@ -88,7 +88,6 @@ namespace MyDeezerStats.Application.Services
             var listeningsBatch = new List<ListeningEntry>(batchSize);
             var rowProcessor = new RowProcessor(_columnMapping, _logger);
 
-            // On commence à 0 car UseHeaderRow = true consomme déjà la première ligne
             for (int i = 0; i < sheet.Rows.Count; i++)
             {
                 try

@@ -97,7 +97,6 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
                     }),
                     new BsonDocument("$group", new BsonDocument {
                         { "_id", new BsonDocument { { DbFields.Album, $"${DbFields.Album}" }, { DbFields.Artist, $"${DbFields.Artist}" } } },
-                        // CORRECTION : Utilisation de DbFields.StreamCountByTrack au lieu de "Tracks"
                         { DbFields.StreamCountByTrack, new BsonDocument("$push", new BsonDocument {
                             { DbFields.Track, "$_id" },
                             { "Count", "$Count" }

@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MyDeezerStats.Application.Dtos.LastStream;
@@ -40,7 +39,7 @@ builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"))
 builder.Services.Configure<LastFmOptions>(builder.Configuration.GetSection("LastFm"));
 builder.Services.Configure<MongoDbSettings>(builder.Configuration.GetSection("MongoDbSettings"));
 
-// ⚡ MongoDB : registration unique et test de connexion
+// MongoDB : registration unique et test de connexion
 builder.Services.AddSingleton<IMongoDatabase>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();

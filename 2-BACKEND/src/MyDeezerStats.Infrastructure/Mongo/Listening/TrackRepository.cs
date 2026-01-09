@@ -23,7 +23,6 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
             limit = QueryHelper.ValidateLimit(limit);
             try
             {
-                // 1. Définition du filtre
                 var filter = Builders<BsonDocument>.Filter.And(
                     QueryHelper.BuildDateFilter(from, to),
                     QueryHelper.FieldHasContent(DbFields.Track),
@@ -31,7 +30,6 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
                     Builders<BsonDocument>.Filter.Exists(DbFields.Date)
                 );
 
-                // 2. Rendu de l'étape Match (v3.0+)
                 var matchStage = PipelineStageDefinitionBuilder.Match(filter)
                     .Render(new RenderArgs<BsonDocument>(_collection.DocumentSerializer, _collection.Settings.SerializerRegistry))
                     .Document;
@@ -47,7 +45,7 @@ namespace MyDeezerStats.Infrastructure.Mongo.Repositories
                         { "NormalizedTrackLower", new BsonDocument("$toLower", "$NormalizedTrack") },
                         { "NormalizedArtistLower", new BsonDocument("$toLower", "$PrimaryArtist") }
                     }),
-                    new BsonDocument("$sort", new BsonDocument(DbFields.Date, -1)), // Pour avoir le LastListening correct lors du group
+                    new BsonDocument("$sort", new BsonDocument(DbFields.Date, -1)), 
                     new BsonDocument("$group", new BsonDocument {
                         { "_id", new BsonDocument { { DbFields.Track, "$NormalizedTrackLower" }, { DbFields.Artist, "$NormalizedArtistLower" } } },
                         { DbFields.StreamCount, new BsonDocument("$sum", 1) },

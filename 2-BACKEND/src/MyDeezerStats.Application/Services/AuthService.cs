@@ -169,7 +169,7 @@ namespace MyDeezerStats.Application.Services
         }
     }
 
-    // Modèles auxiliaires (à placer dans un fichier séparé, par exemple Application/Models/Auth/)
+    // Modèles auxiliaires 
     public class AuthResult
     {
         public bool Success { get; set; }

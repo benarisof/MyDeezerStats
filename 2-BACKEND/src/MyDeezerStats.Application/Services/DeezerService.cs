@@ -14,7 +14,6 @@ namespace MyDeezerStats.Application.Services
         private readonly ILogger<DeezerService> _logger;
         private const string DeezerApiBaseUrl = "https://api.deezer.com";
 
-        // Sémaphore pour limiter les appels parallèles (5 requêtes max en même temps)
         private readonly SemaphoreSlim _apiThrottler = new SemaphoreSlim(5);
 
         public DeezerService(HttpClient httpClient, ILogger<DeezerService> logger)
@@ -135,7 +134,7 @@ namespace MyDeezerStats.Application.Services
         {
             if (track == null) throw new ArgumentNullException(nameof(track));
 
-            // Initialisation avec les données Mongo (y compris le temps réel d'écoute)
+            // Initialisation avec les données Mongo 
             var fullTrack = new ApiTrackInfos
             {
                 Artist = track.Artist,
@@ -153,11 +152,10 @@ namespace MyDeezerStats.Application.Services
                 if (deezerTrack != null)
                 {
                     fullTrack.Duration = deezerTrack.Duration;
-                    fullTrack.TrackUrl = deezerTrack.CoverUrl; // Attention: DeezerTrack search ne retourne pas toujours l'URL preview, parfois Cover. À vérifier selon ton DTO.
+                    fullTrack.TrackUrl = deezerTrack.CoverUrl; 
                     fullTrack.Album = string.IsNullOrEmpty(fullTrack.Album) ? deezerTrack.Album?.Title ?? "" : fullTrack.Album;
                 }
 
-                // Fallback : Si le ListeningTime Mongo est 0 (ex: anciennes données), on le calcule
                 if (fullTrack.TotalListening == 0 && fullTrack.Duration > 0)
                 {
                     fullTrack.TotalListening = fullTrack.Count * fullTrack.Duration;
@@ -183,15 +181,13 @@ namespace MyDeezerStats.Application.Services
                 Title = album.Title,
                 Artist = album.Artist,
                 PlayCount = album.StreamCount,
-                TotalListening = album.ListeningTime, // Vient de Mongo
+                TotalListening = album.ListeningTime, 
                 TrackInfos = album.StreamCountByTrack.Select(t => new ApiTrackInfos
                 {
                     Track = t.Key,
                     Album = album.Title,
                     Artist = album.Artist,
                     Count = t.Value,
-                    // Ici on ne peut pas deviner le temps par track car le dico n'a que le count
-                    // On laisse 0 ou on estimera plus tard si on avait la durée moyenne
                 }).ToList()
             };
         }
@@ -211,7 +207,6 @@ namespace MyDeezerStats.Application.Services
             foreach (var deezerTrack in fullDetails.Tracks?.Data ?? Enumerable.Empty<DeezerTrack>())
             {
                 int localPlayCount = 0;
-                // Essaie de matcher le titre Deezer avec nos clés du dictionnaire (ignorance case)
                 var key = album.StreamCountByTrack.Keys
                     .FirstOrDefault(k => k.Equals(deezerTrack.Title, StringComparison.OrdinalIgnoreCase));
 
@@ -228,11 +223,11 @@ namespace MyDeezerStats.Application.Services
                     TrackUrl = deezerTrack?.Preview ?? string.Empty,
                     Count = localPlayCount,
                     Duration = deezerTrack?.Duration ?? 0,
-                    TotalListening = localPlayCount * (deezerTrack?.Duration ?? 0) // Calcul théorique obligé ici
+                    TotalListening = localPlayCount * (deezerTrack?.Duration ?? 0) 
                 });
             }
 
-            // On ajoute les tracks de Mongo qui n'auraient pas été trouvés dans l'album Deezer (bonus tracks, fautes de frappe...)
+            // On ajoute les tracks de Mongo qui n'auraient pas été trouvés dans l'album Deezer
             foreach (var kvp in album.StreamCountByTrack)
             {
                 if (!trackInfos.Any(t => t.Track.Equals(kvp.Key, StringComparison.OrdinalIgnoreCase)))
@@ -245,9 +240,9 @@ namespace MyDeezerStats.Application.Services
             {
                 Title = deezerAlbum.Title ?? album.Title,
                 Artist = deezerAlbum.Artist?.Name ?? album.Artist,
-                PlayCount = album.StreamCount, // Total Streams
-                TotalListening = album.ListeningTime, // Total Time (Réel Mongo)
-                TotalDuration = fullDetails.Duration, // Durée album officiel
+                PlayCount = album.StreamCount, 
+                TotalListening = album.ListeningTime,
+                TotalDuration = fullDetails.Duration, 
                 ReleaseDate = fullDetails.ReleaseDate ?? string.Empty,
                 TrackInfos = trackInfos.OrderByDescending(t => t.Count).ToList(),
                 CoverUrl = deezerAlbum.CoverXl ?? deezerAlbum.CoverBig ?? string.Empty
@@ -280,22 +275,20 @@ namespace MyDeezerStats.Application.Services
 
         private async Task<FullArtistInfos> MapToFullArtistInfosAsync(ArtistListening artist, DeezerArtistDetails artistDetails)
         {
-            // Correction critique : Utilisation d'un sémaphore pour ne pas spammer l'API
-            // On limite aussi aux 20 titres les plus écoutés pour la performance (optionnel mais recommandé)
             var topTracks = artist.StreamCountByTrack
                 .OrderByDescending(kvp => kvp.Value)
-                .Take(50); // On traite les 50 premiers max
+                .Take(50); 
 
             var tasks = topTracks.Select(async kvp =>
             {
-                await _apiThrottler.WaitAsync(); // Attente d'un slot libre
+                await _apiThrottler.WaitAsync();
                 try
                 {
                     return await ProcessTrackAsync(kvp.Key, kvp.Value, artistDetails.Name ?? artist.Name);
                 }
                 finally
                 {
-                    _apiThrottler.Release(); // Libération du slot
+                    _apiThrottler.Release(); 
                 }
             });
 
@@ -305,7 +298,7 @@ namespace MyDeezerStats.Application.Services
             {
                 Artist = artistDetails.Name ?? artist.Name,
                 PlayCount = artist.StreamCount,
-                TotalListening = artist.ListeningTime, // Temps réel Mongo
+                TotalListening = artist.ListeningTime, 
                 NbFans = artistDetails.NbFan,
                 TrackInfos = enrichedTracks.ToList(),
                 CoverUrl = artistDetails.PictureBig ?? artistDetails.Picture ?? string.Empty
@@ -314,9 +307,6 @@ namespace MyDeezerStats.Application.Services
 
         private async Task<ApiTrackInfos> ProcessTrackAsync(string trackName, int playCount, string artistName)
         {
-            // Note: Ici nous n'avons pas le ListeningTime individuel venant de l'objet ArtistListening (juste le count).
-            // Donc le TotalListening sera estimé.
-
             var deezerTrack = await GetTrackFromDeezer(trackName, artistName);
             int trackDuration = deezerTrack?.Duration ?? 0;
             int estimatedTime = playCount * trackDuration;
@@ -326,7 +316,7 @@ namespace MyDeezerStats.Application.Services
                 Track = trackName,
                 Artist = artistName,
                 Count = playCount,
-                TrackUrl = deezerTrack?.CoverUrl ?? string.Empty, // Ou Preview selon ta prop
+                TrackUrl = deezerTrack?.CoverUrl ?? string.Empty, 
                 Duration = trackDuration,
                 TotalListening = estimatedTime,
                 Album = deezerTrack?.Album?.Title ?? string.Empty
@@ -514,7 +504,6 @@ namespace MyDeezerStats.Application.Services
             {
                 var query = $"artist:\"{Uri.EscapeDataString(artistName)}\" track:\"{Uri.EscapeDataString(trackName)}\"";
 
-                // Utilisation de GetFromJsonAsync au lieu de parsing manuel JsonDocument
                 var response = await _httpClient.GetFromJsonAsync<DeezerSearchResponse<DeezerTrack>>(
                     $"{DeezerApiBaseUrl}/search?q={query}&limit=1");
 
@@ -522,9 +511,6 @@ namespace MyDeezerStats.Application.Services
 
                 if (track != null)
                 {
-                    // Petit hack : Si l'objet DeezerTrack ne mappe pas directement l'image dans une propriété simple,
-                    // assure-toi que ta classe DeezerTrack a bien les propriétés imbriquées mappées ou gère-le ici.
-                    // Supposons que DeezerTrack a une prop 'Album' qui contient 'CoverBig'.
                     if (string.IsNullOrEmpty(track.CoverUrl) && track.Album != null)
                     {
                         track.CoverUrl = track.Album.CoverBig ?? track.Album.CoverXl ?? "";

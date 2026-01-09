@@ -55,7 +55,7 @@ namespace MyDeezerStats.API.Controllers
                 }
 
                 // Validation de la taille du fichier (10MB max)
-                if (file.Length > 10 * 1024 * 1024) // 10MB
+                if (file.Length > 10 * 1024 * 1024) 
                 {
                     _logger.LogWarning("File too large: {FileName} ({FileSize} bytes)", file.FileName, file.Length);
                     return StatusCode(413, new { Message = "Le fichier est trop volumineux. Taille maximale: 10MB." });
@@ -133,8 +133,8 @@ namespace MyDeezerStats.API.Controllers
             // Vérification du type MIME 
             var allowedMimeTypes = new[]
             {
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-                "application/vnd.ms-excel", // .xls
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                "application/vnd.ms-excel", 
                 "application/octet-stream"
             };
 
