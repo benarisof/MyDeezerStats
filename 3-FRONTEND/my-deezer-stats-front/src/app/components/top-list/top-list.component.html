@@ -12,6 +12,7 @@
     <div class="card-list">
       <div *ngFor="let item of items.slice(0, 50); let i = index"
            class="card"
+           (click)="navigateToDetail(item)"
            (mouseenter)="hoveredIndex = i"
            (mouseleave)="hoveredIndex = -1">
         
@@ -23,9 +24,6 @@
                  class="card-image" 
                  [class.artist-type]="type === 'artist'"
                  [class.zoomed]="hoveredIndex === i" />
-            <div class="image-overlay" *ngIf="hoveredIndex === i">
-              <i class="fas fa-play"></i>
-            </div>
           </div>
         </div>
 
@@ -41,13 +39,6 @@
           <p class="listen-count" [class.highlighted]="hoveredIndex === i">
             {{ item.count }} écoutes
           </p>
-        </div>
-        
-        <!-- Bouton d'action au survol -->
-        <div class="card-action" *ngIf="hoveredIndex === i">
-          <button class="action-btn" (click)="navigateToDetail(item)">
-            <i class="fas fa-chevron-right"></i>
-          </button>
         </div>
       </div>
     </div>

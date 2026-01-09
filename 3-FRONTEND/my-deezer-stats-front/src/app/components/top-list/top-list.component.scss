@@ -60,7 +60,9 @@ $deezer-transition: all 0.2s ease-in-out;
     align-items: center;
     gap: 12px;
     
-    i { @include gradient-text; }
+    i { 
+      @include gradient-text; 
+    }
   }
 }
 
@@ -90,15 +92,30 @@ $deezer-transition: all 0.2s ease-in-out;
     border-color: rgba(187, 134, 252, 0.3);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
 
-    .rank-badge { background: $deezer-primary; color: $deezer-bg; }
-    .image-overlay { opacity: 1; }
-    .card-action { opacity: 1; transform: translateX(0); }
+    .rank-badge { 
+      background: $deezer-primary; 
+      color: $deezer-bg; 
+    }
+    
+    // Effet de zoom sur l'image au survol
+    .card-image.zoomed {
+      transform: scale(1.05);
+    }
   }
 
   // Rangs Podium
-  &:nth-child(1) .rank-badge { color: #FFD700; font-size: 16px; }
-  &:nth-child(2) .rank-badge { color: #C0C0C0; }
-  &:nth-child(3) .rank-badge { color: #CD7F32; }
+  &:nth-child(1) .rank-badge { 
+    color: #FFD700; 
+    font-size: 16px; 
+  }
+  
+  &:nth-child(2) .rank-badge { 
+    color: #C0C0C0; 
+  }
+  
+  &:nth-child(3) .rank-badge { 
+    color: #CD7F32; 
+  }
 }
 
 // Bloc de gauche (Rang + Image)
@@ -131,18 +148,16 @@ $deezer-transition: all 0.2s ease-in-out;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    &.artist-type { border-radius: 50%; }
+    transition: transform 0.2s ease;
+    
+    &.artist-type { 
+      border-radius: 50%; 
+    }
+    
+    &.zoomed {
+      transform: scale(1.05);
+    }
   }
-}
-
-.image-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  @include flex-center;
-  opacity: 0;
-  transition: opacity 0.2s;
-  i { font-size: 12px; color: white; }
 }
 
 // Bloc central (Exploitation de la largeur)
@@ -161,7 +176,9 @@ $deezer-transition: all 0.2s ease-in-out;
     margin: 0;
     @include text-ellipsis;
     
-    &.highlighted { color: $deezer-primary; }
+    &.highlighted { 
+      color: $deezer-primary; 
+    }
   }
 
   p {
@@ -178,34 +195,9 @@ $deezer-transition: all 0.2s ease-in-out;
       color: $deezer-text-tertiary;
       font-weight: 500;
       
-      &.highlighted { color: $deezer-secondary; }
-    }
-  }
-}
-
-// Bloc de droite (Action)
-.card-action {
-  width: 40px;
-  display: flex;
-  justify-content: flex-end;
-  opacity: 0;
-  transform: translateX(10px);
-  transition: $deezer-transition;
-
-  .action-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 1px solid $deezer-primary;
-    background: transparent;
-    color: $deezer-primary;
-    cursor: pointer;
-    @include flex-center;
-    font-size: 12px;
-    
-    &:hover {
-      background: $deezer-primary;
-      color: $deezer-bg;
+      &.highlighted { 
+        color: $deezer-secondary; 
+      }
     }
   }
 }
@@ -214,14 +206,23 @@ $deezer-transition: all 0.2s ease-in-out;
 .card {
   animation: slideIn 0.3s ease-out forwards;
   opacity: 0;
+  
   @for $i from 1 through 50 {
-    &:nth-child(#{$i}) { animation-delay: #{$i * 0.015}s; }
+    &:nth-child(#{$i}) { 
+      animation-delay: #{$i * 0.015}s; 
+    }
   }
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { 
+    opacity: 0; 
+    transform: translateY(10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
 }
 
 // Responsive : on repasse en colonne sur mobile uniquement
@@ -231,8 +232,16 @@ $deezer-transition: all 0.2s ease-in-out;
     align-items: flex-start;
     gap: 2px;
     
-    h3 { font-size: 14px; width: 100%; }
-    p { font-size: 12px; width: 100%; }
+    h3 { 
+      font-size: 14px; 
+      width: 100%; 
+    }
+    
+    p { 
+      font-size: 12px; 
+      width: 100%; 
+    }
+    
     p.listen-count { 
       text-align: left; 
       flex: none; 
@@ -240,14 +249,25 @@ $deezer-transition: all 0.2s ease-in-out;
     }
   }
   
-  .rank-container { width: auto; }
+  .rank-container { 
+    width: auto; 
+  }
 }
 
 // Scrollbar personnalisée
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: $deezer-bg; }
+::-webkit-scrollbar { 
+  width: 8px; 
+}
+
+::-webkit-scrollbar-track { 
+  background: $deezer-bg; 
+}
+
 ::-webkit-scrollbar-thumb {
   background: rgba(187, 134, 252, 0.2);
   border-radius: 10px;
-  &:hover { background: $deezer-primary; }
+  
+  &:hover { 
+    background: $deezer-primary; 
+  }
 }
