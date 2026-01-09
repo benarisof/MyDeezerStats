@@ -130,8 +130,9 @@ namespace MyDeezerStats.Application.Services
 
             var album = await _albumRepository.GetAlbumDetailsAsync(title, artist, null, null)
                         ?? throw new NotFoundException($"Album '{title}' par '{artist}' non trouvé");
-
-            return await _deezerService.EnrichFullAlbumWithDeezerData(album);
+            var albumFull = await _deezerService.EnrichFullAlbumWithDeezerData(album);
+            albumFull.TotalListening = albumFull.TrackInfos.Sum(track => track.TotalListening);
+            return albumFull;
         }
 
         public async Task<FullArtistInfos> GetArtistAsync(string fullId)
@@ -140,8 +141,9 @@ namespace MyDeezerStats.Application.Services
 
             var artist = await _artistRepository.GetArtistDetailsAsync(fullId, null, null)
                          ?? throw new NotFoundException($"Artiste '{fullId}' non trouvé");
-
-            return await _deezerService.EnrichFullArtistWithDeezerData(artist);
+            var artistFull = await _deezerService.EnrichFullArtistWithDeezerData(artist);
+            artistFull.TotalListening = artistFull.TrackInfos.Sum(track => track.TotalListening);
+            return artistFull;
         }
 
         #endregion
