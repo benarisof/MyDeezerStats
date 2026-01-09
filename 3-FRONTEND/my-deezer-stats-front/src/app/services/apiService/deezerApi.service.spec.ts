@@ -1,13 +1,13 @@
 import { TestBed } from '@angular/core/testing';
 
-import { CacheService } from './cache.service';
+import { DashboardService } from './deezerApi.service';
 
-describe('CacheService', () => {
-  let service: CacheService;
+describe('DashboardService', () => {
+  let service: DashboardService;
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
-    service = TestBed.inject(CacheService);
+    service = TestBed.inject(DashboardService);
   });
 
   it('should be created', () => {

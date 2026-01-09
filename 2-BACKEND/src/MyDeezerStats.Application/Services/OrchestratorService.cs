@@ -9,20 +9,29 @@ using MyDeezerStats.Domain.Repositories;
 
 namespace MyDeezerStats.Application.Services
 {
-    public class ListeningService : IListeningService
+    public class OrchestratorService : IOrchestratorService
     {
         private readonly IListeningRepository _repository;
+        private readonly IAlbumRepository _albumRepository;
+        private readonly IArtistRepository _artistRepository;
+        private readonly ITrackRepository _trackRepository;
         private readonly IDeezerService _deezerService;
         private readonly ILastFmService _lastFmService;
-        private readonly ILogger<ListeningService> _logger;
+        private readonly ILogger<OrchestratorService> _logger;
 
-        public ListeningService(
+        public OrchestratorService(
             IListeningRepository repository,
+            IAlbumRepository albumRepository,
+            ITrackRepository trackRepository,
+            IArtistRepository artistRepository,
             IDeezerService deezerService,
             ILastFmService lastFmService,
-            ILogger<ListeningService> logger)
+            ILogger<OrchestratorService> logger)
         {
             _repository = repository;
+            _albumRepository = albumRepository;
+            _trackRepository = trackRepository; 
+            _artistRepository = artistRepository;   
             _deezerService = deezerService;
             _lastFmService = lastFmService;
             _logger = logger;
@@ -36,7 +45,7 @@ namespace MyDeezerStats.Application.Services
 
             try
             {
-                var topAlbums = await _repository.GetTopAlbumsWithAsync(nb, from, to);
+                var topAlbums = await _albumRepository.GetTopAlbumsAsync(nb, from, to);
 
                 var tasks = topAlbums.Select(async album =>
                 {
@@ -63,7 +72,7 @@ namespace MyDeezerStats.Application.Services
 
             try
             {
-                var topArtists = await _repository.GetTopArtistWithAsync(nb, from, to);
+                var topArtists = await _artistRepository.GetTopArtistsAsync(nb, from, to);
 
                 var tasks = topArtists.Select(async artist =>
                 {
@@ -90,7 +99,7 @@ namespace MyDeezerStats.Application.Services
 
             try
             {
-                var topTracks = await _repository.GetTopTrackWithAsync(nb, from, to);
+                var topTracks = await _trackRepository.GetTopTracksAsync(nb, from, to);
 
                 var tasks = topTracks.Select(async track =>
                 {
@@ -119,7 +128,7 @@ namespace MyDeezerStats.Application.Services
         {
             var (title, artist) = ParseFullId(fullId);
 
-            var album = await _repository.GetAlbumsWithAsync(title, artist, null, null)
+            var album = await _albumRepository.GetAlbumDetailsAsync(title, artist, null, null)
                         ?? throw new NotFoundException($"Album '{title}' par '{artist}' non trouvé");
 
             return await _deezerService.EnrichFullAlbumWithDeezerData(album);
@@ -129,7 +138,7 @@ namespace MyDeezerStats.Application.Services
         {
             if (string.IsNullOrWhiteSpace(fullId)) throw new ArgumentException("Nom requis", nameof(fullId));
 
-            var artist = await _repository.GetArtistWithAsync(fullId, null, null)
+            var artist = await _artistRepository.GetArtistDetailsAsync(fullId, null, null)
                          ?? throw new NotFoundException($"Artiste '{fullId}' non trouvé");
 
             return await _deezerService.EnrichFullArtistWithDeezerData(artist);
@@ -157,50 +166,16 @@ namespace MyDeezerStats.Application.Services
                 }
 
                 // 3. Toujours renvoyer la source de vérité (la base de données)
-                var localEntries = await _repository.GetLatestListeningsAsync(limit);
+                var localEntries = await _repository.GetRecentListeningsAsync(limit);
                 return localEntries.Select(MapToDto);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sync recent tracks");
-                var localEntries = await _repository.GetLatestListeningsAsync(limit);
+                var localEntries = await _repository.GetRecentListeningsAsync(limit);
                 return localEntries.Select(MapToDto);
             }
         }
-
-        /*public async Task<IEnumerable<ListeningDto>> GetLatestListeningsAsync(int limit = 100)
-        {
-            if (limit <= 0) limit = 100;
-
-            try
-            {
-                // 1. Récupération des données locales
-                var localEntries = await _repository.GetLatestListeningsAsync(limit);
-                var lastStreamDate = localEntries.Any() ? localEntries.Max(x => x.Date) : DateTime.MinValue;
-
-                // 2. Synchronisation avec LastFM
-                var newFromLastFm = await _lastFmService.GetListeningHistorySince(lastStreamDate);
-
-                if (newFromLastFm.Any())
-                {
-                    var toInsert = newFromLastFm.Select(MapToEntity).ToList();
-                    await _repository.InsertListeningsAsync(toInsert);
-
-                    var combined = toInsert.Concat(localEntries)
-                        .OrderByDescending(x => x.Date)
-                        .Take(limit);
-
-                    return combined.Select(MapToDto);
-                }
-
-                return localEntries.Select(MapToDto);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in GetLatestListeningsAsync");
-                throw new ApplicationException("Erreur lors de la récupération des écoutes récentes", ex);
-            }
-        }*/
 
         #endregion
 

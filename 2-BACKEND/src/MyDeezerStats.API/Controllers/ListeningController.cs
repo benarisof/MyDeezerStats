@@ -10,10 +10,10 @@ namespace MyDeezerStats.API.Controllers
     [Route("api/[controller]")]
     public class ListeningController : ControllerBase 
     {
-        private readonly IListeningService _service;
+        private readonly IOrchestratorService _service;
         private readonly ILogger<ListeningController> _logger;
 
-        public ListeningController(IListeningService service, ILogger<ListeningController> logger)
+        public ListeningController(IOrchestratorService service, ILogger<ListeningController> logger)
         {
             _service = service;
             _logger = logger;
@@ -58,7 +58,7 @@ namespace MyDeezerStats.API.Controllers
         /// Récupère les détails d'un album spécifique
         /// </summary>
         /// <param name="identifier">Identifiant de l'album (format: titre|artiste)</param>
-        [Authorize]
+        //[Authorize]
         [HttpGet("album")]
         public async Task<IActionResult> GetAlbum([FromQuery][Required] string? identifier)
         {

@@ -1,21 +1,23 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common'; 
-import { Router } from '@angular/router';
-
-import { DashboardService } from '../../services/dashboard.service';
+import { Component, OnInit, inject, DestroyRef } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { DashboardService } from '../../services/apiService/deezerApi.service';
 import { LoginService } from '../../services/login.service';
+import { NavigationService } from '../../services/navigation.service';
 import { Album, Artist, Track, Recent } from "../../models/dashboard.models";
-import { finalize, forkJoin, Subscription } from 'rxjs';
+import { finalize, forkJoin } from 'rxjs';
 import { switchMap, tap } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss'],
-  imports: [CommonModule] 
+  imports: [CommonModule]
 })
-export class DashboardComponent implements OnInit, OnDestroy {
+export class DashboardComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   topAlbums: Album[] = [];
   topArtists: Artist[] = [];
   topTracks: Track[] = [];
@@ -23,91 +25,64 @@ export class DashboardComponent implements OnInit, OnDestroy {
   
   isLoading: boolean = false;
   errorMessage: string = '';
-  
-  private periodSubscription: Subscription | undefined;
 
   constructor(
     private loginService: LoginService,
-    private router: Router,
-    private dashboardService: DashboardService
+    private dashboardService: DashboardService,
+    private navigationService: NavigationService
   ) {}
 
-ngOnInit(): void {
-  if (!this.loginService.isAuthenticated()) {
-    this.router.navigate(['/login']);
-    return;
+  ngOnInit(): void {
+    if (!this.loginService.isAuthenticated()) {
+      this.navigationService.navigateToLogin();
+      return;
+    }
+    this.loadDashboardData();
   }
 
-  this.periodSubscription = this.dashboardService.period$.pipe(
-    // 1. On active le chargement dès qu'une nouvelle période arrive
-    tap(() => {
+  private loadDashboardData(): void {
+    this.dashboardService.period$.pipe(
+      tap(() => {
         this.isLoading = true;
         this.errorMessage = '';
-    }),
-    switchMap(period => {
-      // 2. On lance les appels
-      return forkJoin([
-        this.dashboardService.getTopAlbums(period, 10), 
-        this.dashboardService.getTopArtists(period, 10),
-        this.dashboardService.getTopTracks(period, 10),
-        this.dashboardService.getRecentListens(period)
-      ]).pipe(
-        finalize(() => this.isLoading = false)
-      );
-    })
-  ).subscribe({
-    next: ([albums, artists, tracks, recentListens]) => {
-      this.topAlbums = albums;
-      this.topArtists = artists;
-      this.topTracks = tracks;
-      this.recentListens = recentListens;
-    },
-    error: (err) => {
-      this.errorMessage = 'Erreur lors du chargement des données';
-      console.error(err);
-    }
-  });
-}
-
-  ngOnDestroy(): void {
-    if (this.periodSubscription) {
-      this.periodSubscription.unsubscribe();
-    }
+      }),
+      switchMap(period => {
+        const data = this.dashboardService.getDashboardData(period);
+        return forkJoin(data).pipe(
+          finalize(() => this.isLoading = false)
+        );
+      }),
+      takeUntilDestroyed(this.destroyRef) // Remplace le manuel unsubscribe()
+    ).subscribe({
+      next: ({ topAlbums, topArtists, topTracks, recentListens }) => {
+        this.topAlbums = topAlbums;
+        this.topArtists = topArtists;
+        this.topTracks = topTracks;
+        this.recentListens = recentListens;
+      },
+      error: (err) => {
+        this.errorMessage = err.message || 'Erreur lors du chargement des données';
+        console.error('Dashboard error:', err);
+      }
+    });
   }
 
-  goToTop(type: 'album' | 'artist' | 'track') {
-    this.router.navigate(['/top', type]);
+  goToTop(type: 'album' | 'artist' | 'track'): void {
+    this.navigationService.navigateToTop(type);
   }
 
   navigateToDetail(type: 'album' | 'artist', item: any): void {
-    let identifier = '';
-    switch (type) {
-      case 'album':
-        const albumTitle = item.title ?? '';
-        const albumArtist = item.artist ?? '';
-        identifier = albumTitle && albumArtist ? `${albumTitle}|${albumArtist}` : '';
-        break;
-      case 'artist':
-        identifier = item.artist ?? '';
-        break;
-    }
-  
-    if (identifier) {
-      this.router.navigate(['/detail', type], { 
-        queryParams: { identifier } 
+    this.navigationService.navigateFromDashboardItem(item, type);
+  }
+
+  scroll(elementId: string, direction: number): void {
+    const container = document.getElementById(elementId);
+    if (container) {
+      const scrollAmount = container.clientWidth * 0.8;
+      container.scrollBy({
+        left: direction * scrollAmount,
+        behavior: 'smooth'
       });
     }
   }
-
-  scroll(elementId: string, direction: number) {
-  const container = document.getElementById(elementId);
-  if (container) {
-    // On calcule la distance de scroll (environ 80% de la largeur visible)
-    const scrollAmount = container.clientWidth * 0.8;
-    container.scrollBy({
-      left: direction * scrollAmount,
-      behavior: 'smooth'
-    });
-  }
-}
 }

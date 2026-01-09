@@ -3,7 +3,7 @@ using MyDeezerStats.Application.Dtos.TopStream;
 
 namespace MyDeezerStats.Application.Interfaces
 {
-    public interface IListeningService
+    public interface IOrchestratorService
     {
         Task<List<ShortAlbumInfos>> GetTopAlbumsAsync(DateTime? from, DateTime? to, int nb = 5);
         Task<FullAlbumInfos> GetAlbumAsync(string identifier);

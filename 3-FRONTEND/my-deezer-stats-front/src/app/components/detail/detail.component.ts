@@ -1,10 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject, DestroyRef } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { LoginService } from '../../services/login.service';
 import { Router, ActivatedRoute } from '@angular/router';
 import { DetailService } from '../../services/detail.service';
 import { DurationPipe } from '../../shared/pipes/duration.pipe';
 import { AlbumItem, ArtistItem, DetailItem } from '../../models/detail.models';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 @Component({
   selector: 'app-detail',
@@ -14,6 +15,7 @@ import { AlbumItem, ArtistItem, DetailItem } from '../../models/detail.models';
   styleUrls: ['./detail.component.scss']
 })
 export class DetailComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
   item?: DetailItem;
   loading = true;
   error: string | null = null;
@@ -27,27 +29,28 @@ export class DetailComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-  if (!this.loginService.isAuthenticated()) {
-    this.router.navigate(['/login']);
-    return;
-  }
-  
-  this.route.params.subscribe(params => {
-    const type = params['type'] as 'album' | 'artist' ;
-    const identifier = this.route.snapshot.queryParams['identifier'];
-    if (identifier) {
-      this.loadDetailData(type, identifier);
-    } else {
-      this.router.navigate(['/dashboard']);
+    if (!this.loginService.isAuthenticated()) {
+      this.router.navigate(['/login']);
+      return;
     }
-  });
-}
-
-
   
+    this.route.params.pipe(
+        takeUntilDestroyed(this.destroyRef)
+    ).subscribe(params => {
+      const type = params['type'] as 'album' | 'artist' ;
+      const identifier = this.route.snapshot.queryParams['identifier'];
+      if (identifier) {
+        this.loadDetailData(type, identifier);
+      } else {
+        this.router.navigate(['/dashboard']);
+      }
+    });
+  }
 
   loadDetailData(type: 'album' | 'artist', identifier: string): void {
-    this.detailService.getDetails(type, identifier).subscribe({
+    this.detailService.getDetails(type, identifier).pipe(
+        takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
       next: (data) => {
         this.item = this.mapDataToItem(type, data);
         this.loading = false;
@@ -77,8 +80,8 @@ export class DetailComponent implements OnInit {
   }
 
   goToDashboard() {
-  this.router.navigate(['/dashboard']); // ou le chemin vers votre dashboard
-}
+    this.router.navigate(['/dashboard']);
+  }
 
   goBack(): void {
     this.location.back();

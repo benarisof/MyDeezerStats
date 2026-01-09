@@ -49,7 +49,6 @@ namespace MyDeezerStats.Application.Services
                 {
                     if (track.ListenDate > sinceDate)
                     {
-                        // Utilisation de int.TryParse pour éviter les crashs
                         int.TryParse(track.Duration, out int durationSec);
 
                         allTracks.Add(new ListeningDto

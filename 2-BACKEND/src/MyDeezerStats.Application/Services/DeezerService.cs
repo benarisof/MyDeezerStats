@@ -45,7 +45,7 @@ namespace MyDeezerStats.Application.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error enriching small album {Title}", album.Title);
-                return new ShortAlbumInfos { Title = album.Title, Artist = album.Artist, Count = album.StreamCount };
+                return new ShortAlbumInfos { Title = album.Title, Artist = album.Artist, Count = album.StreamCount, ListeningTime = album.ListeningTime };
             }
         }
 
@@ -68,7 +68,7 @@ namespace MyDeezerStats.Application.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error enriching small artist {Artist}", artist.Name);
-                return new ShortArtistInfos { Artist = artist.Name, Count = artist.StreamCount };
+                return new ShortArtistInfos { Artist = artist.Name, Count = artist.StreamCount, ListeningTime = artist.ListeningTime };
             }
         }
 
@@ -350,6 +350,7 @@ namespace MyDeezerStats.Application.Services
                     if (album.Title == title)
                     {
                         if (artist.Contains(album.Artist.Name)){
+                            _logger.LogInformation($"cover d'album recupere : {album.CoverXl ?? album.CoverBig}");
                             return album;
                         }
                     }
@@ -476,22 +477,6 @@ namespace MyDeezerStats.Application.Services
                 return null;
             }
         }
-
-
-        //private async Task<DeezerArtist?> SearchArtistOnDeezer(string artistName)
-        //{
-        //    try
-        //    {
-        //        var response = await _httpClient.GetFromJsonAsync<DeezerSearchResponse<DeezerArtist>>(
-        //            $"{DeezerApiBaseUrl}/search/artist?q={Uri.EscapeDataString(artistName)}&limit=1");
-        //        return response?.Data?.FirstOrDefault();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogWarning(ex, "Deezer search failed for artist {Artist}", artistName);
-        //        return null;
-        //    }
-        //}
 
         private async Task<DeezerAlbumDetails?> GetFullAlbumDetails(int albumId)
         {

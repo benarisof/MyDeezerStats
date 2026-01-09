@@ -10,7 +10,7 @@ using MyDeezerStats.Application.Services;
 using MyDeezerStats.Domain.Entities;
 using MyDeezerStats.Domain.Repositories;
 using MyDeezerStats.Infrastructure.Mongo.Authentification;
-using MyDeezerStats.Infrastructure.Mongo.Ecoutes;
+using MyDeezerStats.Infrastructure.Mongo.Repositories;
 using MyDeezerStats.Infrastructure.Mongo.Search;
 using MyDeezerStats.Infrastructure.Services;
 using MyDeezerStats.Infrastructure.Settings;
@@ -73,7 +73,7 @@ builder.Services.AddSingleton<IMongoDatabase>(sp =>
 builder.Services.AddScoped<IDeezerService, DeezerService>();
 builder.Services.AddHttpClient<ILastFmService, LastFmService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
-builder.Services.AddScoped<IListeningService, ListeningService>();
+builder.Services.AddScoped<IOrchestratorService, OrchestratorService>();
 builder.Services.AddScoped<IExcelService, ExcelService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
@@ -84,6 +84,9 @@ builder.Services.AddScoped<IPasswordService, PasswordService>();
 // Repositories
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
 builder.Services.AddScoped<IListeningRepository, ListeningRepository>();
+builder.Services.AddScoped<IAlbumRepository, AlbumRepository>();
+builder.Services.AddScoped<IArtistRepository, ArtistRepository>();
+builder.Services.AddScoped<ITrackRepository, TrackRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 builder.Services.AddScoped<PasswordHasher<User>>();
