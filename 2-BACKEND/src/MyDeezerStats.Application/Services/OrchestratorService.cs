@@ -137,11 +137,11 @@ namespace MyDeezerStats.Application.Services
             return albumFull;
         }
 
-        public async Task<FullArtistInfos> GetArtistAsync(string fullId)
+        public async Task<FullArtistInfos> GetArtistAsync(string fullId, DateTime? from, DateTime? to)
         {
             if (string.IsNullOrWhiteSpace(fullId)) throw new ArgumentException("Nom requis", nameof(fullId));
-
-            var artist = await _artistRepository.GetArtistDetailsAsync(fullId, null, null)
+            var nb = ValidateParams(from, to, 0);
+            var artist = await _artistRepository.GetArtistDetailsAsync(fullId, from, to)
                          ?? throw new NotFoundException($"Artiste '{fullId}' non trouvé");
             var artistFull = await _deezerService.EnrichFullArtistWithDeezerData(artist);
             artistFull.TotalListening = artistFull.TrackInfos.Sum(track => track.TotalListening);

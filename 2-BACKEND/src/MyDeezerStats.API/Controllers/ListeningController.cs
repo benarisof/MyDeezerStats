@@ -141,7 +141,8 @@ namespace MyDeezerStats.API.Controllers
         /// <param name="identifier">Nom de l'artiste</param>
         [Authorize]
         [HttpGet("artist")]
-        public async Task<IActionResult> GetArtist([FromQuery][Required] string? identifier)
+        public async Task<IActionResult> GetArtist([FromQuery][Required] string? identifier, [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to)
         {
             _logger.LogInformation("GET /artist called with identifier={Identifier}", identifier);
 
@@ -153,7 +154,7 @@ namespace MyDeezerStats.API.Controllers
 
             try
             {
-                var result = await _service.GetArtistAsync(identifier);
+                var result = await _service.GetArtistAsync(identifier, from, to);
                 _logger.LogInformation("Successfully retrieved artist {Identifier}", identifier);
                 return Ok(result);
             }
